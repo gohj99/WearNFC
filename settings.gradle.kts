@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "WearNFC"
 include(":mobile")
 include(":wear")
+include(":shared")

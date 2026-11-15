@@ -104,7 +104,8 @@ fun AddCardScreen() {
                             pendingDump = dump
                             pendingType = type
                             coroutineScope.launch { pagerState.animateScrollToPage(3) }
-                        }
+                        },
+                        onRetry = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
                     )
                 }
                 3 -> AnimatedPage(pageIndex = page, pagerState = pagerState) {

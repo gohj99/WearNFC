@@ -17,11 +17,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavHostState
 import com.gohj99.wearnfc.runtime.CardManager
+import com.gohj99.wearnfc.ui.CardDetailPage
 import com.gohj99.wearnfc.ui.addcard.AddCardScreen
 import com.gohj99.wearnfc.ui.main.MainScreen
 import com.gohj99.wearnfc.ui.main.NfcModulePage
@@ -84,6 +87,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(Destinations.ADD_CARD) {
                             AddCardScreen()
+                        }
+                        composable(
+                            route = Destinations.CARD_DETAIL_ROUTE,
+                            arguments = listOf(navArgument("cardId") { type = NavType.StringType }),
+                        ) { backStackEntry ->
+                            CardDetailPage(cardId = backStackEntry.arguments?.getString("cardId").orEmpty())
                         }
                     }
 

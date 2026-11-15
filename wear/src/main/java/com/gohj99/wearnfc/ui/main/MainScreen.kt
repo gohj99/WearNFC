@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -20,6 +21,7 @@ import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.HorizontalPagerScaffold
 import androidx.wear.compose.material3.PagerScaffoldDefaults
 import com.gohj99.wearnfc.runtime.CardManager
+import com.gohj99.wearnfc.data.IcCardUi
 import com.gohj99.wearnfc.ui.main.settings.SettingsPage
 import kotlinx.coroutines.launch
 
@@ -27,6 +29,14 @@ import kotlinx.coroutines.launch
 fun MainScreen() {
     val cardManager = CardManager
     val cards by cardManager.cards.collectAsState()
+    val activeCardId by cardManager.activeCardId.collectAsState()
+    // 卡片增删后按当前卡片重建分页，避免旧页码指向另一张卡并意外切卡。
+    key(cards.map { it.id }) { CardPager(cards, activeCardId) }
+}
+
+@Composable
+private fun CardPager(cards: List<IcCardUi>, activeCardId: String) {
+    val cardManager = CardManager
     val coroutineScope = rememberCoroutineScope()
 
     // 初始页：恢复上次激活的卡片位置。
@@ -39,6 +49,13 @@ fun MainScreen() {
 
     // 当前页是否为设置页（最后一页）
     val isOnSettingsPage = pagerState.currentPage == cards.size + 1
+
+    // 手机端切卡时，即使手表界面已经打开，也同步到手表确认的当前卡片。
+    LaunchedEffect(activeCardId) {
+        if (!isOnSettingsPage && !pagerState.isScrollInProgress) {
+            pagerState.scrollToPage(cardManager.initialPagerPage())
+        }
+    }
 
     // 返回前台时同步外部（如快捷磁贴）切换后的卡片，设置页保持当前位置。
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {

@@ -13,6 +13,9 @@ import com.gohj99.wearnfc.data.IcCardData
 import com.gohj99.wearnfc.data.IcCardType
 import com.gohj99.wearnfc.data.IcCardUi
 import com.gohj99.wearnfc.data.newCardId
+import com.gohj99.wearnfc.sync.WatchSnapshot
+import com.gohj99.wearnfc.sync.WearProtocol
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +25,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -50,7 +55,7 @@ private object OriginalPaths {
 }
 
 /** "原始" 卡片的特殊 ID，表示未切换任何模拟卡。 */
-private const val ORIGINAL_CARD_ID = "__original__"
+private const val ORIGINAL_CARD_ID = WearProtocol.ORIGINAL_ID
 
 /** 持久化的卡片元数据（UI 字段 + dump 文件路径），不含底层字节。 */
 private data class CardMeta(
@@ -64,6 +69,7 @@ private data class CardMeta(
     val uid: String,
     val sak: Byte,
     val atqa: String,
+    val createdAt: Long,
 )
 
 /**
@@ -88,6 +94,17 @@ object CardManager {
     // ── 单例依赖 ─────────────────────────────────────────────────────────────
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val ready = CompletableDeferred<Unit>()
+    private val cardsMutex = Mutex()
+
+    private suspend fun <T> withCards(block: suspend () -> T): T {
+        ready.await()
+        return withContext(Dispatchers.IO) { cardsMutex.withLock { block() } }
+    }
+
+    suspend fun snapshot(): WatchSnapshot = withCards {
+        WatchSnapshot(_cards.value, _activeCardId.value, _isAvailable.value)
+    }
 
     /** IC dump 文件存放目录（app 私有 filesDir/ic），init 后赋值 */
     private lateinit var icDir: File
@@ -159,7 +176,14 @@ object CardManager {
     private fun initialize() {
         scope.launch {
             // 1. 从 DataStore 恢复卡片元数据与激活状态
-            restoreCards()
+            try {
+                restoreCards()
+                ready.complete(Unit)
+            } catch (error: Exception) {
+                ready.completeExceptionally(error)
+                Log.e(TAG, "恢复卡片失败", error)
+                return@launch
+            }
             // 2. 启动时记录"原始"配置文件路径
             refreshOriginalPaths()
             // 3. 检测 root + 模块可用性
@@ -183,7 +207,7 @@ object CardManager {
         refreshCardsUi()
 
         val activeId = prefs[KEY_ACTIVE_CARD] ?: ORIGINAL_CARD_ID
-        _activeCardId.value = activeId
+        _activeCardId.value = activeId.takeIf { id -> metaList.any { it.id == id } } ?: ORIGINAL_CARD_ID
         Log.i(TAG, "恢复卡片：${metaList.size} 张，激活=$activeId")
     }
 
@@ -197,6 +221,7 @@ object CardManager {
                 color = meta.color,
                 type = meta.type,
                 uid = meta.uid,
+                createdAt = meta.createdAt,
             )
         }
         _cards.value = uiList
@@ -290,15 +315,18 @@ object CardManager {
         color: Long,
         type: IcCardType,
         dumpBytes: ByteArray,
-    ): String? = withContext(Dispatchers.IO) {
-        val cardId = newCardId()
+        cardId: String = newCardId(),
+    ): String? = withCards {
+        java.util.UUID.fromString(cardId)
+        if (_cardsMeta.value.any { it.id == cardId }) return@withCards cardId
+        require(dumpBytes.size == if (type == IcCardType.MIFARE_CLASSIC_4K) 4096 else 1024)
         val dumpFile = File(icDir, "$cardId.dump")
         try {
             dumpFile.writeBytes(dumpBytes)
             Log.d(TAG, "写入 dump 文件：${dumpFile.absolutePath} (${dumpBytes.size} bytes)")
         } catch (e: IOException) {
             Log.e(TAG, "写入 dump 文件失败：${e.message}")
-            return@withContext null
+            return@withCards null
         }
 
         // 从 dump Block 0 解析 UID/SAK/ATQA
@@ -306,7 +334,7 @@ object CardManager {
         if (parsed == null) {
             Log.e(TAG, "dump 文件头部解析失败")
             dumpFile.delete()
-            return@withContext null
+            return@withCards null
         }
         val (uid, sak, atqa) = parsed
         Log.i(TAG, "解析 dump：uid=$uid, sak=0x${"%02X".format(sak)}, atqa=${atqa.joinToString("") { "%02X".format(it) }}")
@@ -322,12 +350,13 @@ object CardManager {
             uid = uid,
             sak = sak,
             atqa = atqa.joinToString("") { "%02X".format(it) },
+            createdAt = System.currentTimeMillis(),
         )
 
         val newList = _cardsMeta.value + meta
+        persistCards(newList)
         _cardsMeta.value = newList
         refreshCardsUi()
-        persistCards()
         Log.i(TAG, "添加卡片：$cardId（${newList.size} 张）")
         cardId
     }
@@ -335,27 +364,27 @@ object CardManager {
     /**
      * 删除一张卡片。若删除的是当前激活卡片，自动回退到"原始"。
      */
-    suspend fun removeCard(cardId: String) = withContext(Dispatchers.IO) {
+    suspend fun removeCard(cardId: String): Boolean = withCards {
         val meta = _cardsMeta.value.firstOrNull { it.id == cardId } ?: run {
             Log.w(TAG, "删除卡片：未找到 id=$cardId")
-            return@withContext
+            return@withCards false
         }
-        // 删除 dump 文件
+        // 先确认硬件已还原，再删除当前卡；还原失败时保留卡片和激活状态。
+        if (_activeCardId.value == cardId && !applySelectionLocked(ORIGINAL_CARD_ID)) {
+            return@withCards false
+        }
+        val newList = _cardsMeta.value.filterNot { it.id == cardId }
+        persistCards(newList)
+        _cardsMeta.value = newList
+        refreshCardsUi()
+        // 元数据落盘后再删除 dump，避免保存失败时只剩下无效卡片。
         val dumpFile = File(appContext.filesDir, meta.dumpFilePath)
         if (dumpFile.exists() && !dumpFile.delete()) {
             Log.w(TAG, "删除 dump 文件失败：${dumpFile.absolutePath}")
         }
-        val newList = _cardsMeta.value.filterNot { it.id == cardId }
-        _cardsMeta.value = newList
-        refreshCardsUi()
-        persistCards()
         Log.i(TAG, "删除卡片：$cardId（剩余 ${newList.size} 张）")
 
-        // 若删除的是当前激活卡片，回退到原始
-        if (_activeCardId.value == cardId) {
-            Log.i(TAG, "删除的是激活卡片，回退到原始")
-            switchToCard(ORIGINAL_CARD_ID)
-        }
+        true
     }
 
     /**
@@ -367,12 +396,12 @@ object CardManager {
         detail: String? = null,
         number: String? = null,
         color: Long? = null,
-    ) = withContext(Dispatchers.IO) {
+    ): Boolean = withCards {
         val list = _cardsMeta.value.toMutableList()
         val idx = list.indexOfFirst { it.id == cardId }
         if (idx < 0) {
             Log.w(TAG, "更新卡片：未找到 id=$cardId")
-            return@withContext
+            return@withCards false
         }
         val old = list[idx]
         list[idx] = old.copy(
@@ -381,21 +410,21 @@ object CardManager {
             number = number ?: old.number,
             color = color ?: old.color,
         )
+        persistCards(list)
         _cardsMeta.value = list
         refreshCardsUi()
-        persistCards()
         Log.i(TAG, "更新卡片：$cardId")
+        true
     }
 
     /** 查询某张卡片的底层数据（含完整 dump 字节）。 */
-    suspend fun getCardData(cardId: String): IcCardData? = withContext(Dispatchers.IO) {
-        val meta = _cardsMeta.value.firstOrNull { it.id == cardId } ?: return@withContext null
+    suspend fun getCardData(cardId: String): IcCardData? = withCards {
+        val meta = _cardsMeta.value.firstOrNull { it.id == cardId } ?: return@withCards null
         val dumpFile = File(appContext.filesDir, meta.dumpFilePath)
         if (!dumpFile.exists()) {
             Log.w(TAG, "dump 文件不存在：${dumpFile.absolutePath}")
-            return@withContext null
+            return@withCards null
         }
-        val bytes = dumpFile.readBytes()
         IcCardData(
             id = meta.id,
             type = meta.type,
@@ -408,8 +437,8 @@ object CardManager {
 
     // ── 持久化 ───────────────────────────────────────────────────────────────
 
-    private suspend fun persistCards() {
-        val json = encodeCardMetaList(_cardsMeta.value)
+    private suspend fun persistCards(cards: List<CardMeta> = _cardsMeta.value) {
+        val json = encodeCardMetaList(cards)
         appContext.cardDataStore.edit { prefs ->
             prefs[KEY_CARDS_META] = json
             prefs[KEY_ACTIVE_CARD] = _activeCardId.value
@@ -431,6 +460,7 @@ object CardManager {
                     .put("uid", m.uid)
                     .put("sak", m.sak.toInt() and 0xFF)
                     .put("atqa", m.atqa)
+                    .put("createdAt", m.createdAt)
             )
         }
     }.toString()
@@ -452,6 +482,7 @@ object CardManager {
                         uid = o.optString("uid"),
                         sak = (o.optInt("sak", 0x08) and 0xFF).toByte(),
                         atqa = o.optString("atqa"),
+                        createdAt = o.optLong("createdAt", 0L),
                     )
                 )
             }
@@ -469,39 +500,10 @@ object CardManager {
      * @param cardId 目标卡片 ID；[ORIGINAL_CARD_ID] 表示还原原始
      * @param onResult 切换结果回调：true = 成功（或已是目标卡片，无需切换），false = 失败
      */
-    suspend fun switchToCard(cardId: String, onResult: ((success: Boolean) -> Unit)? = null) = withContext(Dispatchers.IO) {
-        Log.i(TAG, "切换卡片 → $cardId")
-
-        // 幂等：目标与当前激活相同则跳过，避免无谓的 NFC 重启
-        if (cardId == _activeCardId.value) {
-            Log.i(TAG, "目标卡片与当前激活相同，跳过切换：$cardId")
-            onResult?.invoke(true)
-            return@withContext
-        }
-
-        val ok: Boolean
-        if (cardId == ORIGINAL_CARD_ID) {
-            ok = restoreOriginal()
-        } else {
-            val meta = _cardsMeta.value.firstOrNull { it.id == cardId }
-            if (meta == null) {
-                Log.w(TAG, "切换失败：未找到卡片 id=$cardId")
-                onResult?.invoke(false)
-                return@withContext
-            }
-            ok = applyCard(meta)
-        }
-        if (ok) {
-            _activeCardId.value = cardId
-            appContext.cardDataStore.edit { prefs ->
-                prefs[KEY_ACTIVE_CARD] = cardId
-            }
-            vibrateOnCardChanged()
-            Log.i(TAG, "卡片切换完成：$cardId")
-        } else {
-            Log.e(TAG, "卡片切换失败：$cardId")
-        }
-        onResult?.invoke(ok)
+    suspend fun switchToCard(cardId: String, onResult: ((success: Boolean) -> Unit)? = null): Boolean {
+        val success = withCards { applySelectionLocked(cardId) }
+        onResult?.invoke(success)
+        return success
     }
 
     /**
@@ -511,19 +513,20 @@ object CardManager {
      *
      * @param onResult 切换结果回调：true = 成功，false = 失败
      */
-    suspend fun forceApplyCard(cardId: String, onResult: ((success: Boolean) -> Unit)? = null) = withContext(Dispatchers.IO) {
-        Log.i(TAG, "强制应用卡片 → $cardId")
-        val ok: Boolean
-        if (cardId == ORIGINAL_CARD_ID) {
-            ok = restoreOriginal()
+    suspend fun forceApplyCard(cardId: String, onResult: ((success: Boolean) -> Unit)? = null): Boolean {
+        val success = withCards { applySelectionLocked(cardId, force = true) }
+        onResult?.invoke(success)
+        return success
+    }
+
+    /** 调用者持有 cardsMutex，避免手机、磁贴和手表 UI 同时修改 NFC 配置。 */
+    private suspend fun applySelectionLocked(cardId: String, force: Boolean = false): Boolean {
+        if (!force && cardId == _activeCardId.value) return true
+        val ok = if (cardId == ORIGINAL_CARD_ID) {
+            restoreOriginal()
         } else {
-            val meta = _cardsMeta.value.firstOrNull { it.id == cardId }
-            if (meta == null) {
-                Log.w(TAG, "强制应用失败：未找到卡片 id=$cardId")
-                onResult?.invoke(false)
-                return@withContext
-            }
-            ok = applyCard(meta)
+            val meta = _cardsMeta.value.firstOrNull { it.id == cardId } ?: return false
+            applyCard(meta)
         }
         if (ok) {
             _activeCardId.value = cardId
@@ -531,11 +534,8 @@ object CardManager {
                 prefs[KEY_ACTIVE_CARD] = cardId
             }
             vibrateOnCardChanged()
-            Log.i(TAG, "强制应用完成：$cardId")
-        } else {
-            Log.e(TAG, "强制应用失败：$cardId")
         }
-        onResult?.invoke(ok)
+        return ok
     }
 
     /** 成功修改 NFC 卡片配置后给出短暂触觉反馈。 */

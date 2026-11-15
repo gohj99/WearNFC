@@ -2,6 +2,7 @@ package com.gohj99.wearnfc.ui.main
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -31,6 +32,8 @@ import androidx.wear.compose.material3.Text
 import com.gohj99.wearnfc.R
 import com.gohj99.wearnfc.data.IcCardUi
 import com.gohj99.wearnfc.runtime.CardManager
+import com.gohj99.wearnfc.ui.Destinations
+import com.gohj99.wearnfc.ui.LocalNavController
 import kotlin.math.sqrt
 
 /** 卡片切换状态，控制顶部状态文字的显示。 */
@@ -52,6 +55,7 @@ internal fun CardPage(
     count: Int,
     isSelected: Boolean,
 ) {
+    val navController = LocalNavController.current
     var switchState by remember(card.id) { mutableStateOf(SwitchState.Applying) }
 
     LaunchedEffect(card.id, isSelected) {
@@ -114,7 +118,8 @@ internal fun CardPage(
                         )
                     )
                     .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(28.dp))
-                    .padding(18.dp),
+                    .clickable { navController?.navigate(Destinations.cardDetail(card.id)) }
+                    .padding(18.dp)
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),

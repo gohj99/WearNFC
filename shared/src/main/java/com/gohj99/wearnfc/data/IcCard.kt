@@ -46,7 +46,7 @@ data class IcCardData(
 /**
  * 供 Compose UI 订阅的卡片展示模型（无底层字节数据）。
  *
- * [id] 与 [IcCardData.id] 对应，可通过 CardManager 查询完整底层数据。
+ * [id] 与 [IcCardData.id] 对应，手机和手表共用这一展示模型。
  */
 data class IcCardUi(
     val id: String,
@@ -59,6 +59,8 @@ data class IcCardUi(
     val type: IcCardType,
     /** UID 展示字符串 */
     val uid: String,
+    /** 添加到应用的时间戳（毫秒） */
+    val createdAt: Long = 0L,
 )
 
 /** 把 [IcCardData] 和用户填写的展示字段合并成 [IcCardUi] */

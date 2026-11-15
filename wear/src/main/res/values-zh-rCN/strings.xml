@@ -48,4 +48,13 @@
     <!-- 卡片切换状态 -->
     <string name="card_switch_applying">应用中…</string>
     <string name="card_switch_error">应用失败</string>
+
+    <!-- 卡片详情 -->
+    <string name="card_detail_title">卡片详情</string>
+    <string name="card_detail_uid">UID</string>
+    <string name="card_detail_added_at">添加时间</string>
+    <string name="card_detail_name">名称</string>
+    <string name="card_detail_save">保存</string>
+    <string name="card_detail_unknown">未知</string>
+    <string name="add_card_retry">重新读取</string>
 </resources>
