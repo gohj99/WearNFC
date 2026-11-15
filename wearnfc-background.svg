@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">WearNFC background</title>
+  <desc id="description">A full square blue gradient background for the WearNFC icon.</desc>
+  <defs>
+    <linearGradient id="background-gradient" x1="0" y1="512" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E88CB"/>
+      <stop offset="1" stop-color="#53C7F4"/>
+    </linearGradient>
+  </defs>
+  <rect id="background" width="512" height="512" fill="url(#background-gradient)"/>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">WearNFC</title>
+  <desc id="description">A simple upright smartwatch with an NFC card inside its round face, using bold rounded shapes on a blue background.</desc>
+
+  <defs>
+    <linearGradient id="background-gradient" x1="0" y1="512" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E88CB"/>
+      <stop offset="1" stop-color="#53C7F4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Self-contained vector artwork. Remove this rect for a transparent background. -->
+  <rect id="background" width="512" height="512" fill="url(#background-gradient)"/>
+
+  <!-- Centered geometry and broad shapes remain legible in a watch app grid. -->
+  <g id="watch">
+    <rect x="212" y="104" width="88" height="304" rx="28" fill="#BDE5FA"/>
+    <circle cx="256" cy="256" r="112" fill="#F4FAFF"/>
+    <circle cx="256" cy="256" r="88" fill="#087DB8"/>
+  </g>
+
+  <g id="nfc-card">
+    <rect x="188" y="210" width="136" height="92" rx="20" fill="#D7EEFF"/>
+    <g fill="none" stroke="#075B8B" stroke-width="13" stroke-linecap="round">
+      <path d="M243 242q14 14 0 28"/>
+      <path d="M264 228q26 28 0 56"/>
+    </g>
+  </g>
+</svg>

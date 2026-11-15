@@ -1,0 +1,139 @@
+name: Android Build and Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # fetch-depth: 0 以拿到完整历史和 Tag，用于比对版本
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Extract repository name
+        run: echo "REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)" >> $GITHUB_ENV
+
+      - name: Extract version name
+        run: |
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' ./mobile/build.gradle.kts)
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+
+      # 检查该版本号是否已经发布过（有对应 Tag 就跳过 Release，仅编译测试）
+      - name: Check if version is new
+        run: |
+          if git tag -l "v${{ env.VERSION_NAME }}" | grep -q .; then
+            echo "SHOULD_RELEASE=false" >> $GITHUB_ENV
+            echo "Tag v${{ env.VERSION_NAME }} already exists — build only, no release."
+          else
+            echo "SHOULD_RELEASE=true" >> $GITHUB_ENV
+            echo "No tag for v${{ env.VERSION_NAME }} — will build and publish release."
+          fi
+
+      # 仅在新版本时生成 Changelog
+      - name: Generate Changelog
+        if: env.SHOULD_RELEASE == 'true'
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log "$PREVIOUS_TAG"..HEAD --pretty=format:"- %s" \
+              | grep -v "Merge pull request" \
+              | grep -v "Merge branch" \
+              | grep -v "Revert" \
+              | grep -v "Bump version" \
+              | grep -v "Update version")
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s" \
+              | grep -v "Merge pull request" \
+              | grep -v "Merge branch" \
+              | grep -v "Revert" \
+              | grep -v "Bump version" \
+              | grep -v "Update version")
+          fi
+          if [ -z "$CHANGELOG" ]; then
+            CHANGELOG="- Bug fixes and improvements"
+          fi
+          echo "RELEASE_BODY<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        run: |
+          yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platform-tools" "build-tools;35.0.0" || true
+          ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-37" \
+            || ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-35"
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: wrapper
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Decode Keystore
+        run: echo "${{ secrets.SIGNING_KEY }}" | base64 -d > keystore.jks
+
+      - name: Build Release APKs
+        env:
+          ALIAS: ${{ secrets.ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEYSTORE_PATH: ${{ github.workspace }}/keystore.jks
+        run: ./gradlew :mobile:assembleRelease :wear:assembleRelease
+
+      - name: Rename APKs
+        run: |
+          mv mobile/build/outputs/apk/release/mobile-release.apk \
+            ${{ env.REPO_NAME }}-v${{ env.VERSION_NAME }}-mobile.apk
+          mv wear/build/outputs/apk/release/wear-release.apk \
+            ${{ env.REPO_NAME }}-v${{ env.VERSION_NAME }}-wear.apk
+
+      - name: Copy mapping files
+        run: |
+          if [ -f mobile/build/outputs/mapping/release/mapping.txt ]; then
+            cp mobile/build/outputs/mapping/release/mapping.txt \
+              ${{ env.REPO_NAME }}-v${{ env.VERSION_NAME }}-mobile-mapping.txt
+          else
+            echo "# No mapping file (minification disabled)" > \
+              ${{ env.REPO_NAME }}-v${{ env.VERSION_NAME }}-mobile-mapping.txt
+          fi
+          if [ -f wear/build/outputs/mapping/release/mapping.txt ]; then
+            cp wear/build/outputs/mapping/release/mapping.txt \
+              ${{ env.REPO_NAME }}-v${{ env.VERSION_NAME }}-wear-mapping.txt
+          else
+            echo "# No mapping file (minification disabled)" > \
+              ${{ env.REPO_NAME }}-v${{ env.VERSION_NAME }}-wear-mapping.txt
+          fi
+
+      - name: Cleanup Keystore
+        if: always()
+        run: rm -f keystore.jks
+
+      - name: Create Tag and Release
+        if: env.SHOULD_RELEASE == 'true'
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "*.apk,*-mapping.txt"
+          token: ${{ github.token }}
+          generateReleaseNotes: false
+          tag: v${{ env.VERSION_NAME }}
+          name: "WearNFC v${{ env.VERSION_NAME }}"
+          body: |
+            ### 🛠 Update in v${{ env.VERSION_NAME }}:
+            ${{ env.RELEASE_BODY }}
+
+            ---
+            *Built by GitHub Actions*
+          prerelease: false

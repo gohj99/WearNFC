@@ -19,8 +19,28 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val ksFile = System.getenv("KEYSTORE_PATH")
+            val ksPassword = System.getenv("KEY_STORE_PASSWORD")
+            val ksAlias = System.getenv("ALIAS")
+            val ksKeyPassword = System.getenv("KEY_PASSWORD")
+            if (ksFile != null && ksPassword != null && ksAlias != null && ksKeyPassword != null) {
+                storeFile = file(ksFile)
+                storePassword = ksPassword
+                keyAlias = ksAlias
+                keyPassword = ksKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = if (System.getenv("KEYSTORE_PATH") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             optimization {
                 enable = false
             }
