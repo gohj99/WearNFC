@@ -1,4 +1,4 @@
-package com.gohj99.wearnfc.ui.main
+package com.gohj99.wearnfc.ui.main.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
@@ -21,12 +22,16 @@ import androidx.wear.compose.material3.SurfaceTransformation
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.material3.lazy.rememberTransformationSpec
 import androidx.wear.compose.material3.lazy.transformedHeight
+import com.gohj99.wearnfc.R
+import com.gohj99.wearnfc.ui.Destinations
+import com.gohj99.wearnfc.ui.LocalNavController
 
 @Composable
 internal fun SettingsPage() {
     val listState = rememberTransformingLazyColumnState()
     val overscrollEffect = rememberOverscrollEffect()
     val transformationSpec = rememberTransformationSpec()
+    val navController = LocalNavController.current
 
     ScreenScaffold(
         scrollState = listState,
@@ -43,7 +48,7 @@ internal fun SettingsPage() {
             item {
                 ListHeader {
                     Text(
-                        text = "设置",
+                        text = stringResource(R.string.settings_title),
                         style = MaterialTheme.typography.titleLarge,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
@@ -52,24 +57,24 @@ internal fun SettingsPage() {
             }
             item {
                 FilledTonalButton(
-                    onClick = { /* TODO: 打开卡片管理。 */ },
+                    onClick = { navController?.navigate(Destinations.NFC_MODULE) },
                     transformation = SurfaceTransformation(transformationSpec),
                     modifier = Modifier
                         .fillMaxWidth()
                         .transformedHeight(this, transformationSpec),
                 ) {
-                    Text("管理卡片")
+                    Text(stringResource(R.string.settings_module))
                 }
             }
             item {
                 FilledTonalButton(
-                    onClick = { /* TODO: 打开模拟设置。 */ },
+                    onClick = { navController?.navigate(Destinations.ABOUT) },
                     transformation = SurfaceTransformation(transformationSpec),
                     modifier = Modifier
                         .fillMaxWidth()
                         .transformedHeight(this, transformationSpec),
                 ) {
-                    Text("模拟设置")
+                    Text(stringResource(R.string.settings_about))
                 }
             }
             item {

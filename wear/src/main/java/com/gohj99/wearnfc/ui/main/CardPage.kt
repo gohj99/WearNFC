@@ -5,33 +5,33 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import com.gohj99.wearnfc.data.NfcCard
+import com.gohj99.wearnfc.data.IcCardUi
+import kotlin.math.sqrt
 
 @Composable
 internal fun CardPage(
-    card: NfcCard,
+    card: IcCardUi,
     index: Int,
     count: Int,
     isSelected: Boolean,
@@ -42,101 +42,107 @@ internal fun CardPage(
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text(
-            text = "NFC 卡片",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Box(
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 圆形屏幕半径（dp）
+        val r = maxWidth.value / 2f
+        // 卡片水平 padding = 14dp → 卡片半宽
+        val hPad = 14f
+        val hw = r - hPad
+        // safeD：卡片角点距屏幕中心的最大垂直距离，使角点恰好在圆上
+        // safeD = √(R² − hw²)
+        val safeD = sqrt(r * r - hw * hw)
+        val safeTopDp = (r - safeD).dp     // 卡片上边缘最小 y
+        val cardHeightDp = (safeD * 2f).dp // 卡片最大高度 = 2·safeD
+
+        Column(
             modifier = Modifier
-                .padding(top = 8.dp)
-                .fillMaxWidth()
-                .fillMaxHeight(0.72f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(card.color),
-                            Color(card.color).copy(alpha = 0.78f),
-                            Color(0xFF171B1C),
-                        )
-                    )
-                )
-                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(28.dp))
-                .clickable(role = Role.Button) {
-                    // TODO: 在这里处理当前卡片的点击操作。
-                }
-                .padding(18.dp),
+                .fillMaxSize()
+                .padding(horizontal = hPad.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween,
+            // ── 上方区域（高度 = safeTop）：标签居中 ──────────────────────────
+            Box(
+                modifier = Modifier
+                    .height(safeTopDp)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "${index + 1} / $count",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.78f),
-                    )
-                    Text(
-                        text = "NFC",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White,
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.16f))
-                            .padding(horizontal = 10.dp, vertical = 5.dp),
-                    )
-                }
-
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = card.name,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = card.detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.76f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
                 Text(
-                    text = card.number,
+                    text = "NFC 卡片",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.92f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-        }
-        Row(
-            modifier = Modifier.padding(top = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            repeat(count) { dot ->
-                Box(
-                    modifier = Modifier
-                        .size(if (dot == index) 6.dp else 4.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (dot == index) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+
+            // ── 卡片（高度 = 2·safeD，四角恰好在圆形边界内）────────────────────
+            Box(
+                modifier = Modifier
+                    .height(cardHeightDp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(card.color),
+                                Color(card.color).copy(alpha = 0.78f),
+                                Color(0xFF171B1C),
+                            )
                         )
-                )
+                    )
+                    .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(28.dp))
+                    .clickable(role = Role.Button) {
+                        // TODO: 在这里处理当前卡片的点击操作。
+                    }
+                    .padding(18.dp),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${index + 1} / $count",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.78f),
+                        )
+                        Text(
+                            text = "NFC",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.16f))
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = card.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = card.detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.76f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+
+                    Text(
+                        text = card.number,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.92f),
+                    )
+                }
             }
         }
     }

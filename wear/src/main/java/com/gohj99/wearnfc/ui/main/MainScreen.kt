@@ -1,24 +1,48 @@
 package com.gohj99.wearnfc.ui.main
 
+import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.wear.compose.foundation.pager.HorizontalPager
 import androidx.wear.compose.foundation.pager.rememberPagerState
 import androidx.wear.compose.material3.AnimatedPage
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.HorizontalPagerScaffold
 import androidx.wear.compose.material3.PagerScaffoldDefaults
-import com.gohj99.wearnfc.data.NfcCardRepository
+import com.gohj99.wearnfc.runtime.CardManager
+import com.gohj99.wearnfc.ui.main.settings.SettingsPage
+import kotlinx.coroutines.launch
 
 @Composable
 fun MainScreen() {
-    val context = LocalContext.current
-    val repository = remember(context) { NfcCardRepository(context.applicationContext) }
-    val cards by repository.cards.collectAsState(initial = emptyList())
-    val pagerState = rememberPagerState(initialPage = 0) { cards.size + 1 }
+    val cardManager = CardManager
+    val cards by cardManager.cards.collectAsState()
+    val activeCardId by cardManager.activeCardId.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
+
+    // 页数 = 卡片数 + 还原页 + 设置页
+    val pagerState = rememberPagerState(initialPage = 0) { cards.size + 2 }
+
+    // 当前页是否为设置页（最后一页）
+    val isOnSettingsPage = pagerState.currentPage == cards.size + 1
+
+    val focusRequester = remember { FocusRequester() }
+
+    // 切换到非设置页时让 pager 持有旋转焦点；
+    // 切换到设置页时不请求焦点，SettingsPage 内的 ScreenScaffold 自行申请。
+    LaunchedEffect(isOnSettingsPage) {
+        if (!isOnSettingsPage) {
+            focusRequester.requestFocus()
+        }
+    }
 
     AppScaffold {
         HorizontalPagerScaffold(pagerState = pagerState) {
@@ -26,18 +50,44 @@ fun MainScreen() {
                 state = pagerState,
                 flingBehavior = PagerScaffoldDefaults.snapWithSpringFlingBehavior(state = pagerState),
                 rotaryScrollableBehavior = null,
+                modifier = if (!isOnSettingsPage) {
+                    Modifier
+                        .onRotaryScrollEvent { event ->
+                            // 顺时针（正值）→ 下一页；逆时针（负值）→ 上一页
+                            if (!pagerState.isScrollInProgress) {
+                                coroutineScope.launch {
+                                    if (event.verticalScrollPixels > 0) {
+                                        pagerState.animateScrollToPage(
+                                            (pagerState.currentPage + 1)
+                                                .coerceAtMost(pagerState.pageCount - 1)
+                                        )
+                                    } else {
+                                        pagerState.animateScrollToPage(
+                                            (pagerState.currentPage - 1).coerceAtLeast(0)
+                                        )
+                                    }
+                                }
+                            }
+                            true
+                        }
+                        .focusRequester(focusRequester)
+                        .focusable()
+                } else {
+                    // 设置页：不持有焦点，让 ScreenScaffold 内部处理上下滚动
+                    Modifier
+                },
             ) { page ->
                 AnimatedPage(pageIndex = page, pagerState = pagerState) {
                     val card = cards.getOrNull(page)
-                    if (card != null) {
-                        CardPage(
+                    when {
+                        card != null -> CardPage(
                             card = card,
                             index = page,
                             count = cards.size,
-                            isSelected = pagerState.currentPage == page,
+                            isSelected = pagerState.currentPage == page && activeCardId == card.id,
                         )
-                    } else {
-                        SettingsPage()
+                        page == cards.size -> RestorePage()
+                        else -> SettingsPage()
                     }
                 }
             }

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">WearNFC</string>
+
+    <!-- 错误对话框 -->
+    <string name="error_no_root_title">需要 Root 权限</string>
+    <string name="error_no_root_body">WearNFC 需要 Root 权限才能模拟 NFC 卡片。请先通过 KernelSU / BakaSU 获取 Root 权限后重试。</string>
+    <string name="error_dismiss">知道了</string>
+
+    <!-- 还原页 -->
+    <string name="restore_page_label">原始 NFC</string>
+    <string name="restore_card_title">未启用模拟</string>
+    <string name="restore_card_detail">当前使用原始配置</string>
+
+    <!-- 设置 -->
+    <string name="settings_title">设置</string>
+    <string name="settings_module">模拟设置</string>
+    <string name="settings_about">关于</string>
+
+    <!-- NFC 模块页 -->
+    <string name="nfc_module_title">模拟设置</string>
+    <string name="module_galaxy_watch_nfc_provide">Galaxy Watch NFC</string>
+
+    <!-- 关于页 -->
+    <string name="about_title">关于</string>
+    <string name="about_version">版本</string>
+    <string name="about_app_name">WearNFC</string>
+    <string name="about_desc">Wear OS NFC 卡片模拟</string>
+</resources>

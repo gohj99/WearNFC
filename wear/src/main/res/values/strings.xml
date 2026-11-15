@@ -3,4 +3,29 @@
     <string name="hello_world">Hello, %1$s!</string>
     <string name="tile_label">Example tile</string>
     <string name="complication_label">Example complication</string>
+
+    <!-- Error dialog -->
+    <string name="error_no_root_title">Root required</string>
+    <string name="error_no_root_body">WearNFC needs root access to emulate NFC cards. Please grant root via KernelSU or BakaSU and try again.</string>
+    <string name="error_dismiss">Got it</string>
+
+    <!-- Restore page -->
+    <string name="restore_page_label">Original NFC</string>
+    <string name="restore_card_title">Emulation off</string>
+    <string name="restore_card_detail">Original config active</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_module">Emulation settings</string>
+    <string name="settings_about">About</string>
+
+    <!-- NFC module page -->
+    <string name="nfc_module_title">Emulation settings</string>
+    <string name="module_galaxy_watch_nfc_provide">Galaxy Watch NFC</string>
+
+    <!-- About page -->
+    <string name="about_title">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_app_name">WearNFC</string>
+    <string name="about_desc">NFC card emulation for Wear OS</string>
 </resources>
