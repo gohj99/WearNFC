@@ -38,6 +38,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.material3.AlertDialog
+import androidx.wear.compose.material3.AlertDialogDefaults
 import androidx.wear.compose.material3.EdgeButton
 import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.material3.ListHeader
@@ -46,6 +48,7 @@ import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
+import androidx.wear.compose.material3.ButtonDefaults
 import com.gohj99.wearnfc.R
 import com.gohj99.wearnfc.runtime.CardManager
 import java.text.DateFormat
@@ -83,6 +86,10 @@ internal fun CardDetailPage(cardId: String) {
     var editingColor by remember(card.id) { mutableStateOf(false) }
     var draftColor by remember(card.id, card.color) { mutableStateOf(card.color) }
     var saving by remember(card.id) { mutableStateOf(false) }
+    var deleting by remember(card.id) { mutableStateOf(false) }
+    var showDeleteConfirmation by remember(card.id) { mutableStateOf(false) }
+    var showDeleteError by remember(card.id) { mutableStateOf(false) }
+    val isEditing = editingName || editingDetail || editingColor
 
     fun saveChanges() {
         val name = draftName.trim()
@@ -109,6 +116,17 @@ internal fun CardDetailPage(cardId: String) {
         }
     }
 
+    fun deleteCard() {
+        if (deleting || saving) return
+        scope.launch {
+            deleting = true
+            val removed = runCatching { CardManager.removeCard(card.id) }.getOrDefault(false)
+            deleting = false
+            showDeleteConfirmation = false
+            if (!removed) showDeleteError = true
+        }
+    }
+
     LaunchedEffect(editingName, editingDetail) {
         if (editingName || editingDetail) {
             focusRequester.requestFocus()
@@ -120,6 +138,28 @@ internal fun CardDetailPage(cardId: String) {
         ScreenScaffold(
             scrollState = listState,
             overscrollEffect = overscrollEffect,
+            edgeButton = {
+                EdgeButton(
+                    onClick = {
+                        if (!saving && !deleting) {
+                            if (isEditing) saveChanges() else showDeleteConfirmation = true
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors().copy(
+                        containerColor = if (isEditing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        contentColor = if (isEditing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onError,
+                    ),
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                ) {
+                    Text(
+                        when {
+                            saving || deleting -> "…"
+                            isEditing -> stringResource(R.string.card_detail_done)
+                            else -> stringResource(R.string.card_detail_delete)
+                        }
+                    )
+                }
+            },
             modifier = Modifier.fillMaxSize(),
         ) { contentPadding ->
             Box(modifier = Modifier.fillMaxSize()) {
@@ -191,18 +231,43 @@ internal fun CardDetailPage(cardId: String) {
                             },
                         )
                     }
-                    item { Spacer(Modifier.height(64.dp)) }
-                }
-
-                if (editingName || editingDetail || editingColor) {
-                    EdgeButton(
-                        onClick = ::saveChanges,
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    ) {
-                        Text(if (saving) "…" else stringResource(R.string.card_detail_save))
-                    }
+                    item { Spacer(Modifier.height(8.dp)) }
                 }
             }
+
+            AlertDialog(
+                visible = showDeleteConfirmation,
+                onDismissRequest = { if (!deleting) showDeleteConfirmation = false },
+                confirmButton = {
+                    AlertDialogDefaults.ConfirmButton(onClick = ::deleteCard) {
+                        Text(stringResource(R.string.card_detail_delete_confirm))
+                    }
+                },
+                dismissButton = {
+                    AlertDialogDefaults.DismissButton(
+                        onClick = { if (!deleting) showDeleteConfirmation = false },
+                    ) {
+                        Text(stringResource(R.string.card_detail_cancel))
+                    }
+                },
+                title = { Text(stringResource(R.string.card_detail_delete_title)) },
+                text = {
+                    Text(stringResource(R.string.card_detail_delete_message, card.name))
+                },
+            )
+
+            AlertDialog(
+                visible = showDeleteError,
+                onDismissRequest = { showDeleteError = false },
+                confirmButton = {
+                    AlertDialogDefaults.ConfirmButton(onClick = { showDeleteError = false }) {
+                        Text(stringResource(R.string.error_dismiss))
+                    }
+                },
+                dismissButton = {},
+                title = { Text(stringResource(R.string.card_detail_delete_failed_title)) },
+                text = { Text(stringResource(R.string.card_detail_delete_failed_message)) },
+            )
         }
     }
 }
