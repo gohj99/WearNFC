@@ -1,8 +1,5 @@
 <resources>
     <string name="app_name">WearNFC</string>
-    <string name="hello_world">Hello, %1$s!</string>
-    <string name="tile_label">Example tile</string>
-    <string name="complication_label">Example complication</string>
 
     <!-- Error dialog -->
     <string name="error_no_root_title">Root required</string>
@@ -29,16 +26,22 @@
     <string name="about_app_name">WearNFC</string>
     <string name="about_desc">NFC card emulation for Wear OS</string>
 
+    <!-- Tile -->
+    <string name="tile_label">NFC Switch</string>
+    <string name="tile_no_cards">No cards</string>
+    <string name="tile_next">Next</string>
+
     <!-- Add card flow -->
     <string name="add_card_title">Add Card</string>
     <string name="add_card_method_watch">Add from Watch</string>
     <string name="add_card_method_phone">From Phone (Soon)</string>
-    <string name="add_card_scan_title">Hold IC Card</string>
-    <string name="add_card_scan_hint">Hold your IC card against the back of the watch</string>
+    <string name="add_card_scan_title">Hold Card Near Watch</string>
+    <string name="add_card_scan_hint">Hold your card against the back of the watch</string>
     <string name="add_card_reading_title">Reading…</string>
     <string name="add_card_reading_hint">Please wait</string>
-    <string name="add_card_done_title">Card Added</string>
-    <string name="add_card_done_hint">Returning…</string>
+    <string name="add_card_done_title">Name Your Card</string>
+    <string name="add_card_done_button">Done</string>
+    <string name="card_default_name">Card</string>
     <string name="settings_add_card">Add Card</string>
 
     <!-- Card switch status -->

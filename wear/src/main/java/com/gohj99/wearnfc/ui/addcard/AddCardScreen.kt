@@ -19,6 +19,7 @@ import androidx.wear.compose.foundation.pager.HorizontalPager
 import androidx.wear.compose.foundation.pager.rememberPagerState
 import androidx.wear.compose.material3.AnimatedPage
 import androidx.wear.compose.material3.AppScaffold
+import com.gohj99.wearnfc.data.IcCardType
 import com.gohj99.wearnfc.utils.LocalGlobalAppState
 import kotlinx.coroutines.launch
 
@@ -32,6 +33,10 @@ fun AddCardScreen() {
 
     // 保留检测到的标签，供 Page2 使用
     var processingTag by remember { mutableStateOf<Tag?>(null) }
+
+    // Page2 读取完成后暂存 dump 数据，待 Page3 命名后再保存
+    var pendingDump by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingType by remember { mutableStateOf(IcCardType.MIFARE_CLASSIC_1K) }
 
     // 进入屏幕时清除上一次残留的标签
     LaunchedEffect(Unit) {
@@ -95,17 +100,24 @@ fun AddCardScreen() {
                 2 -> AnimatedPage(pageIndex = page, pagerState = pagerState) {
                     AddCardPage2(
                         tag = processingTag,
-                        onComplete = {
+                        onComplete = { dump, type ->
+                            pendingDump = dump
+                            pendingType = type
                             coroutineScope.launch { pagerState.animateScrollToPage(3) }
                         }
                     )
                 }
                 3 -> AnimatedPage(pageIndex = page, pagerState = pagerState) {
-                    AddCardPage3(
-                        onFinish = {
-                            appState.navController?.popBackStack()
-                        }
-                    )
+                    val dump = pendingDump
+                    if (dump != null) {
+                        AddCardPage3(
+                            pendingDump = dump,
+                            pendingType = pendingType,
+                            onFinish = {
+                                appState.navController?.popBackStack()
+                            }
+                        )
+                    }
                 }
             }
         }

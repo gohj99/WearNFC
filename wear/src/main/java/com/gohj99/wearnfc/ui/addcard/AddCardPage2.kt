@@ -20,16 +20,15 @@ import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.gohj99.wearnfc.R
 import com.gohj99.wearnfc.data.IcCardType
-import com.gohj99.wearnfc.runtime.CardManager
 import com.gohj99.wearnfc.utils.readCardDump
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** 第 2 页：读取中。在后台读取 dump 并写入卡片单例，完成后回调。 */
+/** 第 2 页：读取中。在后台读取 dump，完成后将数据回传，不直接保存。 */
 @Composable
 internal fun AddCardPage2(
     tag: Tag?,
-    onComplete: () -> Unit,
+    onComplete: (dumpBytes: ByteArray, type: IcCardType) -> Unit,
 ) {
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -63,19 +62,8 @@ internal fun AddCardPage2(
                     IcCardType.MIFARE_CLASSIC_4K
                 else
                     IcCardType.MIFARE_CLASSIC_1K
-                val uidHex = if (dump.size >= 4) {
-                    dump.copyOfRange(0, 4).joinToString("") { "%02X".format(it) }
-                } else ""
-                CardManager.addCard(
-                    name = "IC 卡",
-                    detail = "UID: $uidHex",
-                    number = uidHex.chunked(2).joinToString(" "),
-                    color = 0xFF146C65L,
-                    type = type,
-                    dumpBytes = dump,
-                )
+                onComplete(dump, type)
             }
         }
-        onComplete()
     }
 }

@@ -1,6 +1,10 @@
 package com.gohj99.wearnfc.runtime
 
 import android.content.Context
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -492,6 +496,7 @@ object CardManager {
             appContext.cardDataStore.edit { prefs ->
                 prefs[KEY_ACTIVE_CARD] = cardId
             }
+            vibrateOnCardChanged()
             Log.i(TAG, "卡片切换完成：$cardId")
         } else {
             Log.e(TAG, "卡片切换失败：$cardId")
@@ -525,11 +530,29 @@ object CardManager {
             appContext.cardDataStore.edit { prefs ->
                 prefs[KEY_ACTIVE_CARD] = cardId
             }
+            vibrateOnCardChanged()
             Log.i(TAG, "强制应用完成：$cardId")
         } else {
             Log.e(TAG, "强制应用失败：$cardId")
         }
         onResult?.invoke(ok)
+    }
+
+    /** 成功修改 NFC 卡片配置后给出短暂触觉反馈。 */
+    private fun vibrateOnCardChanged() {
+        try {
+            val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                appContext.getSystemService(VibratorManager::class.java)?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                appContext.getSystemService(Vibrator::class.java)
+            } ?: return
+
+            if (!vibrator.hasVibrator()) return
+            vibrator.vibrate(VibrationEffect.createOneShot(50L, VibrationEffect.DEFAULT_AMPLITUDE))
+        } catch (e: Exception) {
+            Log.w(TAG, "卡片已修改，但震动反馈不可用：${e.message}")
+        }
     }
 
     /**

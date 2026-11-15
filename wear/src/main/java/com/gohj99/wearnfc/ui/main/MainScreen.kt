@@ -11,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.rotary.onRotaryScrollEvent
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.wear.compose.foundation.pager.HorizontalPager
 import androidx.wear.compose.foundation.pager.rememberPagerState
 import androidx.wear.compose.material3.AnimatedPage
@@ -37,6 +39,18 @@ fun MainScreen() {
 
     // 当前页是否为设置页（最后一页）
     val isOnSettingsPage = pagerState.currentPage == cards.size + 1
+
+    // 返回前台时同步外部（如快捷磁贴）切换后的卡片，设置页保持当前位置。
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        if (!isOnSettingsPage) {
+            val activePage = cardManager.initialPagerPage()
+            if (pagerState.currentPage != activePage) {
+                coroutineScope.launch {
+                    pagerState.scrollToPage(activePage)
+                }
+            }
+        }
+    }
 
     val focusRequester = remember { FocusRequester() }
 
