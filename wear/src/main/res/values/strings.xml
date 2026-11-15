@@ -40,4 +40,8 @@
     <string name="add_card_done_title">Card Added</string>
     <string name="add_card_done_hint">Returning…</string>
     <string name="settings_add_card">Add Card</string>
+
+    <!-- Card switch status -->
+    <string name="card_switch_applying">Applying…</string>
+    <string name="card_switch_error">Failed to apply</string>
 </resources>

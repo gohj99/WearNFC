@@ -1,12 +1,15 @@
 package com.gohj99.wearnfc.ui
 
+import android.content.ComponentName
+import android.content.Intent
 import android.nfc.NfcAdapter
+import android.nfc.cardemulation.CardEmulation
 import android.os.Bundle
 import android.util.Log
+import com.gohj99.wearnfc.nfc.WearNfcHostApduService
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,17 +31,19 @@ import com.gohj99.wearnfc.utils.LocalGlobalAppState
 
 class MainActivity : ComponentActivity() {
     private var nfcAdapter: NfcAdapter? = null
+    private var cardEmulation: CardEmulation? = null
     private var appState: GlobalAppState? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
+        cardEmulation = nfcAdapter?.let { CardEmulation.getInstance(it) }
         setContent {
             WearNFCTheme {
                 val navController = rememberSwipeDismissableNavController()
                 val navHostState = rememberSwipeDismissableNavHostState()
 
-                // 初始化“数据共享区域”
+                // 初始化"数据共享区域"
                 val appState = remember { GlobalAppState() }
                 appState.navController = navController
                 this@MainActivity.appState = appState
@@ -56,16 +61,6 @@ class MainActivity : ComponentActivity() {
                     } else {
                         // 可用后清除之前的 root 错误
                         if (currentError is AppError.NoRoot) currentError = null
-                    }
-                }
-
-                // NFC 前台读卡模式：nfcReaderEnabled 为 true 时启用，离开时停用
-                val nfcReaderEnabled = appState.nfcReaderEnabled
-                DisposableEffect(nfcReaderEnabled) {
-                    if (nfcReaderEnabled) enableNfcReader()
-                    onDispose {
-                        try { nfcAdapter?.disableReaderMode(this@MainActivity) }
-                        catch (e: Exception) { Log.e("MainActivity", "NFC disable", e) }
                     }
                 }
 
@@ -102,26 +97,34 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        // singleTask 保证单实例；NFC tag 由 AddCardScreen Reader Mode 直接读取，此处不处理。
+        Log.d("MainActivity", "onNewIntent: action=${intent.action}")
+    }
+
     override fun onResume() {
         super.onResume()
-        if (appState?.nfcReaderEnabled == true) enableNfcReader()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        try { nfcAdapter?.disableReaderMode(this) } catch (_: Exception) {}
-    }
-
-    private fun enableNfcReader() {
+        // 注册前台首选 HCE 服务，确保 DH 路由优先于其他支付/HCE App。
+        // 不调用 enableReaderMode：读卡器模式与 HCE 卡模拟互斥，
+        // Reader Mode 由 AddCardScreen（添加卡片流程）自行开关。
         try {
-            nfcAdapter?.enableReaderMode(
+            cardEmulation?.setPreferredService(
                 this,
-                { tag -> appState?.detectedNfcTag?.value = tag },
-                NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK,
-                null,
+                ComponentName(this, WearNfcHostApduService::class.java),
             )
+            Log.d("MainActivity", "setPreferredService ok")
         } catch (e: Exception) {
-            Log.e("MainActivity", "NFC enableReaderMode failed", e)
+            Log.w("MainActivity", "setPreferredService failed: ${e.message}")
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // App 完全退出时才注销前台首选服务
+        try {
+            cardEmulation?.unsetPreferredService(this)
+        } catch (_: Exception) {}
     }
 }

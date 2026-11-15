@@ -25,11 +25,15 @@ import kotlinx.coroutines.launch
 fun MainScreen() {
     val cardManager = CardManager
     val cards by cardManager.cards.collectAsState()
-    val activeCardId by cardManager.activeCardId.collectAsState()
     val coroutineScope = rememberCoroutineScope()
 
+    // 初始页：恢复上次激活的卡片位置。
+    // remember(Unit) 保证只在 Composable 首次进入组合时计算一次，
+    // 避免 cards 列表更新时重置 pager 位置。
+    val initialPage = remember { cardManager.initialPagerPage() }
+
     // 页数 = 卡片数 + 还原页 + 设置页
-    val pagerState = rememberPagerState(initialPage = 0) { cards.size + 2 }
+    val pagerState = rememberPagerState(initialPage = initialPage) { cards.size + 2 }
 
     // 当前页是否为设置页（最后一页）
     val isOnSettingsPage = pagerState.currentPage == cards.size + 1
@@ -84,9 +88,13 @@ fun MainScreen() {
                             card = card,
                             index = page,
                             count = cards.size,
-                            isSelected = pagerState.currentPage == page && activeCardId == card.id,
+                            // isSelected 只表示"这一页正显示在屏幕中央"，
+                            // 与 activeCardId 解耦：滑到就立即触发切换
+                            isSelected = pagerState.currentPage == page,
                         )
-                        page == cards.size -> RestorePage()
+                        page == cards.size -> RestorePage(
+                            isSelected = pagerState.currentPage == page,
+                        )
                         else -> SettingsPage()
                     }
                 }

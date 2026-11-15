@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HostApduService 的 AID 声明。
+    本 App 通过 root 内核模块完成 Mifare Classic 模拟，Android HCE 层的 AID
+    仅用于向系统注册服务，使 CardEmulation.setPreferredService() 可以将本 App
+    设为前台首选服务，从而确保 NFC 路由优先到设备主机（DH）。
+    AID D2760000850101 = 自定义"其他"类别 AID，不与支付类冲突。
+-->
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/app_name"
+    android:requireDeviceUnlock="false">
+    <aid-group
+        android:category="other"
+        android:description="@string/app_name">
+        <aid-filter android:name="D2760000850101" />
+    </aid-group>
+</host-apdu-service>

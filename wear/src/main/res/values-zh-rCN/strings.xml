@@ -38,4 +38,8 @@
     <string name="add_card_done_title">读取完成</string>
     <string name="add_card_done_hint">即将自动返回</string>
     <string name="settings_add_card">添加卡片</string>
+
+    <!-- 卡片切换状态 -->
+    <string name="card_switch_applying">应用中…</string>
+    <string name="card_switch_error">应用失败</string>
 </resources>

@@ -13,6 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,16 +31,34 @@ import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
 import com.gohj99.wearnfc.R
+import com.gohj99.wearnfc.runtime.CardManager
 import kotlin.math.sqrt
+
+/** 还原页切换状态，控制顶部状态文字的显示。 */
+private enum class RestoreState { Applying, Success, Error }
 
 /**
  * "恢复原始 NFC 配置"页。
  *
  * 在 [MainScreen] 的 pager 中位于卡片之后、设置页之前，模拟未启用时的占位卡片：
  * 中央一张大卡片，中间一道斜杠，标识软件未接管 NFC。
+ *
+ * 滑动到此页时（[isSelected] = true）自动还原原始配置，无需点击。
+ * 顶部状态文字同 [CardPage]：切换中 / 成功（隐藏）/ 失败。
  */
 @Composable
-internal fun RestorePage() {
+internal fun RestorePage(isSelected: Boolean) {
+    var restoreState by remember { mutableStateOf(RestoreState.Applying) }
+
+    LaunchedEffect(isSelected) {
+        if (isSelected) {
+            restoreState = RestoreState.Applying
+            CardManager.switchToCard(CardManager.ORIGINAL_ID) { success ->
+                restoreState = if (success) RestoreState.Success else RestoreState.Error
+            }
+        }
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val r = maxWidth.value / 2f
         val hPad = 14f
@@ -49,8 +72,27 @@ internal fun RestorePage() {
                 .padding(horizontal = hPad.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // 上方留白（与下方对称，卡片垂直居中）
-            Box(modifier = Modifier.weight(1f).fillMaxWidth())
+            // ── 顶部状态文字区域（固定高度，避免卡片位移）──────────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+                when (restoreState) {
+                    RestoreState.Applying -> Text(
+                        text = stringResource(R.string.card_switch_applying),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.6f),
+                    )
+                    RestoreState.Error -> Text(
+                        text = stringResource(R.string.card_switch_error),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    RestoreState.Success -> { /* 成功：不显示任何文字 */ }
+                }
+            }
 
             // 卡片（高度 = 2·safeD，四角恰好在圆形边界内）
             Box(
@@ -69,16 +111,6 @@ internal fun RestorePage() {
                     )
                     .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(28.dp)),
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawLine(
-                        color = Color.White.copy(alpha = 0.5f),
-                        start = Offset(0f, size.height),
-                        end = Offset(size.width, 0f),
-                        strokeWidth = 4.dp.toPx(),
-                        cap = StrokeCap.Round,
-                    )
-                }
-
                 Column(
                     modifier = Modifier
                         .fillMaxSize()

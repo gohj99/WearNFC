@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  NFC 技术过滤器。
+  当外部读卡器靠近且 app 在前台时，Android NFC 框架会将 MIFARE Classic 卡片
+  派发给 MainActivity（通过 ACTION_TECH_DISCOVERED）。
+  对于后台场景，enableReaderMode() 已在 MainActivity 中动态注册；
+  此文件保证 app 也能处理其他来源触发的 NFC_TECH intent。
+-->
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- MIFARE Classic（1K / 4K） -->
+    <tech-list>
+        <tech>android.nfc.tech.MifareClassic</tech>
+    </tech-list>
+    <!-- 兜底：通用 NfcA（ISO 14443-3A） -->
+    <tech-list>
+        <tech>android.nfc.tech.NfcA</tech>
+    </tech-list>
+</resources>

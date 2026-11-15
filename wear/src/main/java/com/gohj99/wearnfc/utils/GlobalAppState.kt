@@ -13,9 +13,6 @@ class GlobalAppState {
     // 参数: compose全局导航控制器
     var navController: NavHostController? by mutableStateOf(null)
 
-    // NFC 读卡相关
-    // 是否应启用前台 NFC 读卡模式（由 MainActivity 通过 DisposableEffect 监听并调用系统 API）
-    var nfcReaderEnabled: Boolean by mutableStateOf(false)
     // 检测到的 NFC 标签；非 null 表示有新卡靠近，消费后应置回 null
     val detectedNfcTag: MutableStateFlow<Tag?> = MutableStateFlow(null)
 }
