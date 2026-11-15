@@ -6,12 +6,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberOverscrollEffect
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -50,7 +53,12 @@ import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-/** 卡片详情页：UID 和添加时间只读，名称可点按编辑。 */
+private val cardColors = listOf(
+    0xFF146C65L, 0xFF65468CL, 0xFF285A8EL,
+    0xFF87612CL, 0xFF8B4057L, 0xFF3D6B72L,
+)
+
+/** 卡片详情页：UID 和添加时间只读，其余展示字段可点按编辑。 */
 @Composable
 internal fun CardDetailPage(cardId: String) {
     val navController = LocalNavController.current
@@ -70,11 +78,16 @@ internal fun CardDetailPage(cardId: String) {
     val focusRequester = remember { FocusRequester() }
     var editingName by remember(card.id) { mutableStateOf(false) }
     var draftName by remember(card.id, card.name) { mutableStateOf(card.name) }
-    var savingName by remember(card.id) { mutableStateOf(false) }
+    var editingDetail by remember(card.id) { mutableStateOf(false) }
+    var draftDetail by remember(card.id, card.detail) { mutableStateOf(card.detail) }
+    var editingColor by remember(card.id) { mutableStateOf(false) }
+    var draftColor by remember(card.id, card.color) { mutableStateOf(card.color) }
+    var saving by remember(card.id) { mutableStateOf(false) }
 
-    fun saveName() {
+    fun saveChanges() {
         val name = draftName.trim()
-        if (savingName) return
+        val detail = draftDetail.trim()
+        if (saving || detail.length > 120) return
         if (name.isBlank()) {
             draftName = card.name
             editingName = false
@@ -82,20 +95,22 @@ internal fun CardDetailPage(cardId: String) {
             return
         }
         scope.launch {
-            savingName = true
+            saving = true
             try {
-                if (CardManager.updateCard(card.id, name = name)) {
+                if (CardManager.updateCard(card.id, name = name, detail = detail, color = draftColor)) {
                     editingName = false
+                    editingDetail = false
+                    editingColor = false
                     keyboardController?.hide()
                 }
             } finally {
-                savingName = false
+                saving = false
             }
         }
     }
 
-    LaunchedEffect(editingName) {
-        if (editingName) {
+    LaunchedEffect(editingName, editingDetail) {
+        if (editingName || editingDetail) {
             focusRequester.requestFocus()
             keyboardController?.show()
         }
@@ -143,25 +158,48 @@ internal fun CardDetailPage(cardId: String) {
                         )
                     }
                     item {
-                        NameRow(
+                        EditableTextRow(
                             label = stringResource(R.string.card_detail_name),
                             value = draftName,
                             editing = editingName,
                             focusRequester = focusRequester,
                             onClick = { editingName = true },
                             onValueChange = { draftName = it.take(40) },
-                            onDone = ::saveName,
+                            onDone = ::saveChanges,
                         )
                     }
-                    item { Spacer(Modifier.height(32.dp)) }
+                    item {
+                        EditableTextRow(
+                            label = stringResource(R.string.card_detail_detail),
+                            value = draftDetail,
+                            editing = editingDetail,
+                            singleLine = false,
+                            focusRequester = focusRequester,
+                            onClick = { editingDetail = true },
+                            onValueChange = { draftDetail = it.take(120) },
+                            onDone = ::saveChanges,
+                        )
+                    }
+                    item {
+                        ColorPickerRow(
+                            label = stringResource(R.string.card_detail_color),
+                            selected = draftColor,
+                            enabled = !saving,
+                            onSelect = {
+                                draftColor = it
+                                editingColor = true
+                            },
+                        )
+                    }
+                    item { Spacer(Modifier.height(64.dp)) }
                 }
 
-                if (editingName) {
+                if (editingName || editingDetail || editingColor) {
                     EdgeButton(
-                        onClick = ::saveName,
+                        onClick = ::saveChanges,
                         modifier = Modifier.align(Alignment.BottomCenter),
                     ) {
-                        Text(stringResource(R.string.card_detail_save))
+                        Text(if (saving) "…" else stringResource(R.string.card_detail_save))
                     }
                 }
             }
@@ -191,10 +229,11 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun NameRow(
+private fun EditableTextRow(
     label: String,
     value: String,
     editing: Boolean,
+    singleLine: Boolean = true,
     focusRequester: FocusRequester,
     onClick: () -> Unit,
     onValueChange: (String) -> Unit,
@@ -215,10 +254,11 @@ private fun NameRow(
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
-                singleLine = true,
+                singleLine = singleLine,
+                maxLines = if (singleLine) 1 else 3,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardOptions = KeyboardOptions(imeAction = if (singleLine) ImeAction.Done else ImeAction.Default),
                 keyboardActions = KeyboardActions(onDone = { onDone() }),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -245,6 +285,56 @@ private fun NameRow(
                     .clickable(onClick = onClick)
                     .padding(horizontal = 12.dp, vertical = 10.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun ColorPickerRow(
+    label: String,
+    selected: Long,
+    enabled: Boolean,
+    onSelect: (Long) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            cardColors.chunked(3).forEach { rowColors ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    rowColors.forEach { value ->
+                        Box(
+                            modifier = Modifier
+                                .width(34.dp)
+                                .height(34.dp)
+                                .background(Color(value), CircleShape)
+                                .border(
+                                    width = if (selected == value) 3.dp else 1.dp,
+                                    color = if (selected == value) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.3f),
+                                    shape = CircleShape,
+                                )
+                                .clickable(enabled = enabled) { onSelect(value) },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (selected == value) Text("✓", color = Color.White)
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -52,8 +52,6 @@ data class IcCardUi(
     val id: String,
     val name: String,
     val detail: String,
-    /** 卡片展示用卡号（如 "**** 4821"） */
-    val number: String,
     /** 卡片颜色，ARGB Long */
     val color: Long,
     val type: IcCardType,
@@ -64,12 +62,11 @@ data class IcCardUi(
 )
 
 /** 把 [IcCardData] 和用户填写的展示字段合并成 [IcCardUi] */
-fun IcCardData.toUi(name: String, detail: String, number: String, color: Long): IcCardUi =
+fun IcCardData.toUi(name: String, detail: String, color: Long): IcCardUi =
     IcCardUi(
         id = id,
         name = name,
         detail = detail,
-        number = number,
         color = color,
         type = type,
         uid = uid,

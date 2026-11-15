@@ -7,7 +7,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WearProtocolTest {
-    private val card = IcCardUi("card-1", "门禁卡", "公司", "1234", 0xFF146C65L,
+    private val card = IcCardUi("card-1", "门禁卡", "公司", 0xFF146C65L,
         IcCardType.MIFARE_CLASSIC_1K, "09F85906", 1794729600000L)
 
     @Test fun requestPreservesCorrelationAndPayload() {
@@ -20,7 +20,9 @@ class WearProtocolTest {
 
     @Test fun snapshotRoundTripPreservesCurrentCardAndArgb() {
         val response = WatchResponse("request-1", true, "", WatchSnapshot(listOf(card), card.id, true))
-        assertEquals(response, WearProtocol.decodeResponse(WearProtocol.encodeResponse(response)))
+        val encoded = String(WearProtocol.encodeResponse(response))
+        assertFalse(encoded.contains("number"))
+        assertEquals(response, WearProtocol.decodeResponse(encoded.toByteArray()))
     }
 
     @Test fun emptyWatchCanConfirmOriginalConfiguration() {
@@ -38,7 +40,7 @@ class WearProtocolTest {
 
     @Test fun rejectsUnsupportedVersionBeforeDisplayingCards() {
         val request = WearProtocol.request(WearProtocol.SYNC)
-        val json = JSONObject(String(WearProtocol.encodeRequest(request))).put("version", 2)
+        val json = JSONObject(String(WearProtocol.encodeRequest(request))).put("version", 3)
         assertThrows(IllegalArgumentException::class.java) { WearProtocol.decodeRequest(json.toString().toByteArray()) }
     }
 
@@ -64,7 +66,7 @@ class WearProtocolTest {
 
     @Test fun rejectsBlankNamesAndOutOfRangeColors() {
         fun fields(name: String, color: Long) = JSONObject().put("name", name).put("color", color)
-            .put("detail", "").put("number", "")
+            .put("detail", "")
         assertThrows(IllegalArgumentException::class.java) { WearProtocol.validateCardFields(fields("  ", 0)) }
         assertThrows(IllegalArgumentException::class.java) { WearProtocol.validateCardFields(fields("门禁", -1)) }
         WearProtocol.validateCardFields(fields("门禁", 0xFFFFFFFFL))

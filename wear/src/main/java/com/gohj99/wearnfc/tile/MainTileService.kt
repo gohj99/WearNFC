@@ -1,5 +1,6 @@
 package com.gohj99.wearnfc.tile
 
+import android.content.ComponentName
 import androidx.wear.protolayout.ActionBuilders
 import androidx.wear.protolayout.ColorBuilders
 import androidx.wear.protolayout.DimensionBuilders.dp
@@ -28,6 +29,7 @@ import androidx.wear.tiles.RequestBuilders.TileRequest
 import androidx.wear.tiles.TileBuilders
 import com.gohj99.wearnfc.R
 import com.gohj99.wearnfc.runtime.CardManager
+import com.gohj99.wearnfc.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -102,6 +104,7 @@ class MainTileService : Material3TileService() {
         }
 
         val nextClickable = if (isSwitching) NOOP_CLICKABLE else makeLoadClickable(nextId)
+        val openAppClickable = makeLaunchClickable(this@MainTileService)
         // ── 屏幕宽度 → 卡片高度（横向比，宽 > 高，参考信用卡 ~1.65:1）────────
         val screenWidthDp = requestParams.deviceConfiguration.screenWidthDp.toFloat()
         val cardHeightDp = ((screenWidthDp - 28f) / 1.65f).coerceIn(80f, 110f)
@@ -179,7 +182,7 @@ class MainTileService : Material3TileService() {
                                                     .setAll(dp(14f))
                                                     .build()
                                             )
-                                            .setClickable(nextClickable)
+                                            .setClickable(openAppClickable)
                                             .build()
                                     )
                                     .setHorizontalAlignment(LayoutElementBuilders.HORIZONTAL_ALIGN_START)
@@ -235,6 +238,16 @@ private fun makeLoadClickable(cardId: String): ModifiersBuilders.Clickable =
                         .build()
                 )
                 .build()
+        )
+        .build()
+
+/** 打开手表主界面的 Clickable。 */
+private fun makeLaunchClickable(context: MainTileService): ModifiersBuilders.Clickable =
+    ModifiersBuilders.Clickable.Builder()
+        .setOnClick(
+            ActionBuilders.launchAction(
+                ComponentName(context, MainActivity::class.java),
+            )
         )
         .build()
 

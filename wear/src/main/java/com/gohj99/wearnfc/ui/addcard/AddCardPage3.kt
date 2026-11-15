@@ -51,7 +51,6 @@ internal fun AddCardPage3(
             CardManager.addCard(
                 name = cardName.trim().ifBlank { defaultName },
                 detail = "",
-                number = "",
                 color = 0xFF146C65L,
                 type = pendingType,
                 dumpBytes = pendingDump,

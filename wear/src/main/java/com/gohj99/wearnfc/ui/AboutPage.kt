@@ -66,6 +66,16 @@ internal fun AboutPage() {
                         text = stringResource(R.string.about_app_name),
                         style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item {
+                    Text(
+                        text = stringResource(R.string.about_author),
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

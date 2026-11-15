@@ -32,7 +32,8 @@ object WearProtocol {
     const val DELETE = "delete"
     const val SELECT = "select"
     const val MAX_CARDS = 100
-    private const val VERSION = 1
+    // Card metadata no longer carries the optional display number.
+    private const val VERSION = 2
     private const val MAX_MESSAGE_BYTES = 90 * 1024
     private val actions = setOf(SYNC, ADD, UPDATE, DELETE, SELECT)
 
@@ -60,7 +61,7 @@ object WearProtocol {
         .put("cards", JSONArray().apply {
             response.snapshot.cards.forEach { card ->
                 put(JSONObject().put("id", card.id).put("name", card.name)
-                    .put("detail", card.detail).put("number", card.number)
+                    .put("detail", card.detail)
                     .put("color", card.color).put("type", card.type.name).put("uid", card.uid)
                     .put("createdAt", card.createdAt))
             }
@@ -73,7 +74,7 @@ object WearProtocol {
         val list = List(cards.length()) { index ->
             val card = cards.getJSONObject(index)
             IcCardUi(card.getString("id"), card.getString("name"), card.getString("detail"),
-                card.getString("number"), card.getLong("color"),
+                card.getLong("color"),
                 IcCardType.valueOf(card.getString("type")), card.getString("uid"),
                 card.optLong("createdAt", 0L))
         }
@@ -87,7 +88,6 @@ object WearProtocol {
     fun validateCardFields(payload: JSONObject) {
         require(payload.getString("name").trim().length in 1..40) { "卡片名称需为 1–40 个字符" }
         require(payload.getString("detail").length <= 120) { "备注过长" }
-        require(payload.getString("number").length <= 40) { "卡号过长" }
         require(payload.getLong("color") in 0..0xFFFFFFFFL) { "卡片颜色无效" }
     }
 

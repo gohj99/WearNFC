@@ -13,7 +13,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.TransformingLazyColumn
+import androidx.wear.compose.foundation.lazy.TransformingLazyColumnState
 import androidx.wear.compose.foundation.lazy.rememberTransformingLazyColumnState
+import androidx.wear.compose.foundation.rotary.RotaryScrollableDefaults
 import androidx.wear.compose.material3.FilledTonalButton
 import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.MaterialTheme
@@ -27,8 +29,10 @@ import com.gohj99.wearnfc.ui.Destinations
 import com.gohj99.wearnfc.ui.LocalNavController
 
 @Composable
-internal fun SettingsPage() {
-    val listState = rememberTransformingLazyColumnState()
+internal fun SettingsPage(
+    listState: TransformingLazyColumnState = rememberTransformingLazyColumnState(),
+    isActive: Boolean = true,
+) {
     val overscrollEffect = rememberOverscrollEffect()
     val transformationSpec = rememberTransformationSpec()
     val navController = LocalNavController.current
@@ -40,6 +44,11 @@ internal fun SettingsPage() {
     ) { contentPadding ->
         TransformingLazyColumn(
             state = listState,
+            rotaryScrollableBehavior = if (isActive) {
+                RotaryScrollableDefaults.behavior(listState)
+            } else {
+                null
+            },
             overscrollEffect = overscrollEffect,
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(8.dp),

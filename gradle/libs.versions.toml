@@ -13,6 +13,7 @@ composeMaterial3 = "1.7.1"
 composeFoundation = "1.7.1"
 composeUiTooling = "1.7.1"
 wearToolingPreview = "1.0.0"
+wearRemoteInteractions = "1.2.0"
 coreSplashscreen = "1.2.0"
 tiles = "1.6.2"
 tilesRenderer = "1.6.2"
@@ -49,6 +50,7 @@ compose-material3 = { group = "androidx.wear.compose", name = "compose-material3
 androidx-compose-foundation = { group = "androidx.wear.compose", name = "compose-foundation", version.ref = "composeFoundation" }
 compose-ui-tooling = { group = "androidx.wear.compose", name = "compose-ui-tooling", version.ref = "composeUiTooling" }
 androidx-wear-tooling-preview = { group = "androidx.wear", name = "wear-tooling-preview", version.ref = "wearToolingPreview" }
+androidx-wear-remote-interactions = { group = "androidx.wear", name = "wear-remote-interactions", version.ref = "wearRemoteInteractions" }
 androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-tiles = { group = "androidx.wear.tiles", name = "tiles", version.ref = "tiles" }
 androidx-tiles-renderer = { group = "androidx.wear.tiles", name = "tiles-renderer", version.ref = "tilesRenderer" }

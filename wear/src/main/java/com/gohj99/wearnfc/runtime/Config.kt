@@ -70,7 +70,6 @@ object Config {
     fun init(context: Context) {
         appContext = context.applicationContext
         restoreFromDataStore()
-        Log.i(TAG, "Config 初始化完成")
     }
 
     private fun restoreFromDataStore() {
@@ -81,12 +80,9 @@ object Config {
                 val module = nfcModuleFromId(savedId)
                 if (module != null) {
                     _selectedModule.value = module
-                    Log.i(TAG, "恢复配置：nfc_module=$savedId")
                 } else {
-                    Log.w(TAG, "DataStore 中的模块 ID '$savedId' 无法识别，使用默认值")
+                    Log.w(TAG, "Unknown NFC module ID '$savedId'; using the default module")
                 }
-            } else {
-                Log.i(TAG, "未找到已保存配置，使用默认模块：${_selectedModule.value.moduleId}")
             }
         }
     }
@@ -102,7 +98,6 @@ object Config {
             appContext.configDataStore.edit { prefs ->
                 prefs[KEY_NFC_MODULE] = module.moduleId
             }
-            Log.i(TAG, "切换 NFC 模块：${module.moduleId}")
         }
     }
 }

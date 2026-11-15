@@ -49,4 +49,9 @@ sealed class AppError(
         titleRes = R.string.error_no_root_title,
         bodyRes = R.string.error_no_root_body,
     )
+
+    data object NoSupportedModule : AppError(
+        titleRes = R.string.error_no_supported_module_title,
+        bodyRes = R.string.error_no_supported_module_body,
+    )
 }

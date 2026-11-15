@@ -164,15 +164,15 @@ object PhoneCommunication {
         }
     }
 
-    suspend fun addCard(id: String, name: String, detail: String, number: String, color: Long,
+    suspend fun addCard(id: String, name: String, detail: String, color: Long,
                         type: IcCardType, dump: ByteArray, watchId: String): Boolean = command(
-        WearProtocol.ADD, fields(name, detail, number, color).put("cardId", id)
+        WearProtocol.ADD, fields(name, detail, color).put("cardId", id)
             .put("type", type.name).put("dump", Base64.encodeToString(dump, Base64.NO_WRAP)),
-        "卡片已添加到手表", watchId,
+        "卡片已添加到手表", watchId, waitForOperation = true,
     )
 
-    suspend fun updateCard(id: String, name: String, detail: String, number: String, color: Long): Boolean = command(
-        WearProtocol.UPDATE, fields(name, detail, number, color).put("cardId", id), "卡片已更新",
+    suspend fun updateCard(id: String, name: String, detail: String, color: Long): Boolean = command(
+        WearProtocol.UPDATE, fields(name, detail, color).put("cardId", id), "卡片已更新",
     )
 
     suspend fun deleteCard(id: String): Boolean = command(
@@ -184,9 +184,16 @@ object PhoneCommunication {
         if (id == WearProtocol.ORIGINAL_ID) "手表已还原原始配置" else "已切换手表当前卡片",
     )
 
-    private suspend fun command(action: String, payload: JSONObject, successMessage: String, watchId: String? = null): Boolean {
-        // 不排队执行用户操作，避免断线重连或切换设备后执行过期意图。
-        if (!operationMutex.tryLock()) {
+    private suspend fun command(
+        action: String,
+        payload: JSONObject,
+        successMessage: String,
+        watchId: String? = null,
+        waitForOperation: Boolean = false,
+    ): Boolean {
+        // Deferred adds wait for the reconnect sync to finish; other actions remain fail-fast.
+        if (waitForOperation) operationMutex.lock()
+        else if (!operationMutex.tryLock()) {
             report("正在与手表通信，请稍后重试")
             return false
         }
@@ -235,6 +242,6 @@ object PhoneCommunication {
 
     fun report(message: String) { _events.tryEmit(message) }
 
-    private fun fields(name: String, detail: String, number: String, color: Long) = JSONObject()
-        .put("name", name.trim()).put("detail", detail).put("number", number).put("color", color)
+    private fun fields(name: String, detail: String, color: Long) = JSONObject()
+        .put("name", name.trim()).put("detail", detail).put("color", color)
 }

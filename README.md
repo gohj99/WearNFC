@@ -66,7 +66,7 @@ Install the mobile APK on the paired Android phone and open it. The phone app di
 ### 3. Add and use a card
 
 1. In the phone app, tap **Add card** and hold the card near the phone's NFC antenna.
-2. Keep the card still while the reader scans it. Enter a name, optional note, display number, and color, then save it to the watch.
+2. Keep the card still while the reader scans it. Enter a name, optional note, and color, then save it to the watch.
 3. Select **Set as current card** to apply it to the watch.
 4. Use the watch app or the Wear OS Tile to switch between saved cards.
 5. Select **Original NFC** to stop emulation and restore the watch's original NFC configuration.
@@ -106,7 +106,7 @@ The watch-side card manager persists metadata in DataStore and raw dumps in the 
 
 ### The phone says that the NFC module is unavailable
 
-Confirm that the [`galaxy_watch_nfc_provide`](https://github.com/gohj99/galaxy_watch_nfc_provide/) module is installed and enabled on the watch, that WearNFC has root access, and that the selected module is the one installed on the watch. The watch app checks the module's `nfcconf status` command during startup.
+Confirm that the [`galaxy_watch_nfc_provide`](https://github.com/gohj99/galaxy_watch_nfc_provide/) module is installed and enabled on the watch, that WearNFC has root access, and that the selected module is the one installed on the watch. During startup, the watch app runs `su -c "test -d /data/adb/modules/galaxy_watch_nfc_provide"` to check that the module directory exists. The splash screen stays visible until this check finishes, then the app opens and shows a missing-module dialog if needed. `nfcconf status` is only used to read original configuration backup paths; it does not determine whether the module is installed.
 
 ### The phone cannot connect to the watch
 

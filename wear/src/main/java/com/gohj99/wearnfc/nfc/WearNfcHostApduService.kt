@@ -2,7 +2,6 @@ package com.gohj99.wearnfc.nfc
 
 import android.nfc.cardemulation.HostApduService
 import android.os.Bundle
-import android.util.Log
 
 /**
  * 前台首选 HCE 服务。
@@ -20,22 +19,13 @@ import android.util.Log
 class WearNfcHostApduService : HostApduService() {
 
     override fun processCommandApdu(commandApdu: ByteArray, extras: Bundle?): ByteArray {
-        Log.d(TAG, "processCommandApdu: ${commandApdu.joinToString(" ") { "%02X".format(it) }}")
         // 实际模拟由内核模块完成；此处返回 SW 6F00（Function not supported）
         return SW_FUNCTION_NOT_SUPPORTED
     }
 
-    override fun onDeactivated(reason: Int) {
-        val desc = when (reason) {
-            DEACTIVATION_LINK_LOSS   -> "LINK_LOSS"
-            DEACTIVATION_DESELECTED  -> "DESELECTED"
-            else                     -> "reason=$reason"
-        }
-        Log.d(TAG, "onDeactivated: $desc")
-    }
+    override fun onDeactivated(reason: Int) = Unit
 
     companion object {
-        private const val TAG = "WearNfcHCE"
         /** SW: Function not supported (6F 00) */
         private val SW_FUNCTION_NOT_SUPPORTED = byteArrayOf(0x6F.toByte(), 0x00.toByte())
     }

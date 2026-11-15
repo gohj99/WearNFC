@@ -1,5 +1,6 @@
 package com.gohj99.wearnfc
 
+import android.content.Intent
 import android.nfc.NfcAdapter
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -23,12 +24,15 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         model = ViewModelProvider(this)[MobileViewModel::class.java]
+        // 旋转屏幕时由 ViewModel 保留请求和草稿，不重复消费启动入口。
+        if (savedInstanceState == null) handleLaunchIntent(intent)
         enableEdgeToEdge()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 try {
                     combine(model.add, PhoneCommunication.state) { draft, connection ->
-                        (connection.connected && connection.watch?.id == draft.watchId &&
+                        (connection.connected &&
+                            (draft.watchId.isBlank() || connection.watch?.id == draft.watchId) &&
                             (draft.stage == AddStage.Scanning || draft.stage == AddStage.Reading)) to draft.scanAttempt
                     }.distinctUntilChanged().collect { (readingEnabled, _) ->
                         if (readingEnabled) {
@@ -52,6 +56,25 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContent { WearNFCTheme { MobileApp(model) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleLaunchIntent(intent)
+    }
+
+    private fun handleLaunchIntent(intent: Intent) {
+        val uri = intent.data
+        val isAppUri = intent.action == Intent.ACTION_VIEW &&
+            uri?.scheme == "android-app" && uri.host == packageName
+        // 兼容系统直接交付 INSERT，以及伴侣应用原样转发 VIEW + android-app URI。
+        val action = if (isAppUri) {
+            runCatching { Intent.parseUri(uri.toString(), Intent.URI_ANDROID_APP_SCHEME).action }.getOrNull()
+        } else intent.action
+        if (action == Intent.ACTION_INSERT || (isAppUri && action == Intent.ACTION_MAIN)) {
+            model.requestAddFromWatch()
+        }
     }
 
     override fun onStart() {

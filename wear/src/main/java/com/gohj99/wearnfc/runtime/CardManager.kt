@@ -62,7 +62,6 @@ private data class CardMeta(
     val id: String,
     val name: String,
     val detail: String,
-    val number: String,
     val color: Long,
     val type: IcCardType,
     val dumpFilePath: String,
@@ -102,8 +101,12 @@ object CardManager {
         return withContext(Dispatchers.IO) { cardsMutex.withLock { block() } }
     }
 
-    suspend fun snapshot(): WatchSnapshot = withCards {
-        WatchSnapshot(_cards.value, _activeCardId.value, _isAvailable.value)
+    suspend fun snapshot(): WatchSnapshot {
+        ready.await()
+        val available = isAvailable.first { it != null } == true
+        return withCards {
+            WatchSnapshot(_cards.value, _activeCardId.value, available)
+        }
     }
 
     /** IC dump 文件存放目录（app 私有 filesDir/ic），init 后赋值 */
@@ -111,16 +114,14 @@ object CardManager {
 
     // ── 可用性 ───────────────────────────────────────────────────────────────
 
-    private val _isAvailable = MutableStateFlow(false)
+    private val _isAvailable = MutableStateFlow<Boolean?>(null)
 
     /**
-     * 当前模块是否可用。
+     * 当前选中模块的目录是否存在；null 表示尚未完成检测。
      *
-     * 为 true 需同时满足：
-     *  - 设备有 root（`su` 可用）
-     *  - 当前选中模块（见 [Config]）的 `nfcconf status` 能正常输出
+     * 通过 `su -c "test -d <模块目录>"` 的退出码判断，不依赖 nfcconf 输出。
      */
-    val isAvailable: StateFlow<Boolean> = _isAvailable.asStateFlow()
+    val isAvailable: StateFlow<Boolean?> = _isAvailable.asStateFlow()
 
     // ── 卡片列表 Flow ────────────────────────────────────────────────────────
 
@@ -169,7 +170,6 @@ object CardManager {
     fun init(context: Context) {
         appContext = context.applicationContext
         icDir = File(appContext.filesDir, "ic").apply { mkdirs() }
-        Log.i(TAG, "CardManager 初始化完成")
         initialize()
     }
 
@@ -181,13 +181,12 @@ object CardManager {
                 ready.complete(Unit)
             } catch (error: Exception) {
                 ready.completeExceptionally(error)
-                Log.e(TAG, "恢复卡片失败", error)
-                return@launch
+                Log.e(TAG, "Failed to restore saved cards", error)
             }
-            // 2. 启动时记录"原始"配置文件路径
-            refreshOriginalPaths()
-            // 3. 检测 root + 模块可用性
+            // 2. 卡片恢复失败也继续检测模块，让 Activity 的启动页能结束等待
             checkAvailability()
+            // 3. 模块存在时读取原始配置路径；读取失败不影响安装检测结果
+            if (_isAvailable.value == true) refreshOriginalPaths()
         }
     }
 
@@ -199,7 +198,7 @@ object CardManager {
             emptyList()
         } else {
             runCatching { decodeCardMetaList(json) }.getOrElse {
-                Log.w(TAG, "解析卡片元数据失败：${it.message}")
+                Log.w(TAG, "Failed to parse card metadata: ${it.message}")
                 emptyList()
             }
         }
@@ -208,7 +207,16 @@ object CardManager {
 
         val activeId = prefs[KEY_ACTIVE_CARD] ?: ORIGINAL_CARD_ID
         _activeCardId.value = activeId.takeIf { id -> metaList.any { it.id == id } } ?: ORIGINAL_CARD_ID
-        Log.i(TAG, "恢复卡片：${metaList.size} 张，激活=$activeId")
+
+        // Rewrite metadata from older versions so removed fields such as the
+        // optional display number do not remain in the local JSON.
+        val normalizedJson = encodeCardMetaList(metaList)
+        if (json != normalizedJson) {
+            appContext.cardDataStore.edit { values ->
+                values[KEY_CARDS_META] = normalizedJson
+                values[KEY_ACTIVE_CARD] = _activeCardId.value
+            }
+        }
     }
 
     private fun refreshCardsUi() {
@@ -217,7 +225,6 @@ object CardManager {
                 id = meta.id,
                 name = meta.name,
                 detail = meta.detail,
-                number = meta.number,
                 color = meta.color,
                 type = meta.type,
                 uid = meta.uid,
@@ -227,52 +234,20 @@ object CardManager {
         _cards.value = uiList
     }
 
-    // ── root & 模块检测 ──────────────────────────────────────────────────────
+    // ── 模块检测 ─────────────────────────────────────────────────────────────
 
     /**
-     * 检测当前模块可用性，更新 [isAvailable]。
-     *
-     * 流程：
-     * 1. 检测 root（直接命令行 `su`）
-     * 2. 读取 [Config] 当前模块
-     * 3. 执行 `nfcconf status`，有输出则可用，否则不可用
+     * 用一条 su 命令检查当前模块目录，按退出码更新 [isAvailable]。
+     * test -d 成功时不会输出内容，因此不能用 stdout 是否为空判断。
      */
     suspend fun checkAvailability() = withContext(Dispatchers.IO) {
-        Log.i(TAG, "开始检测可用性…")
+        _isAvailable.value = null
         val module = Config.selectedModule.value
-        Log.d(TAG, "当前模块：${module.moduleId}")
-
-        val hasRoot = checkRoot()
-        if (!hasRoot) {
-            Log.w(TAG, "无 root，isAvailable=false")
-            _isAvailable.value = false
-            return@withContext
+        val result = runSuCommand("test -d '${module.moduleDir}'")
+        _isAvailable.value = result.success
+        if (!result.success) {
+            Log.w(TAG, "Module directory check failed for ${module.moduleDir} (exit=${result.exitCode}): ${result.stderr.take(200)}")
         }
-
-        // 执行 nfcconf status
-        val statusCmd = "${module.nfcconfBin} status"
-        Log.d(TAG, "执行：su -c '$statusCmd'")
-        val result = runSuCommand(statusCmd)
-        if (result.success && result.stdout.isNotBlank()) {
-            Log.i(TAG, "nfcconf status 成功，模块可用")
-            // 顺便从 status 输出解析原始文件路径
-            parseStatusPaths(result.stdout)
-            _isAvailable.value = true
-        } else {
-            Log.w(TAG, "nfcconf status 无输出或失败，isAvailable=false（exit=${result.exitCode}）")
-            _isAvailable.value = false
-        }
-    }
-
-    /** 直接命令行 `su` 检测 root。 */
-    private fun checkRoot(): Boolean = try {
-        val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-        val ok = p.waitFor() == 0
-        Log.d(TAG, "checkRoot: su -c id 退出码=${p.waitFor()} -> $ok")
-        ok
-    } catch (e: Exception) {
-        Log.w(TAG, "checkRoot 异常：${e.message}")
-        false
     }
 
     /**
@@ -287,10 +262,8 @@ object CardManager {
             val trimmed = line.trim()
             if (trimmed.startsWith("ROUTING_CONFIG_ORIGINAL=")) {
                 OriginalPaths.routingXml = trimmed.substringAfter('=').trim()
-                Log.d(TAG, "解析到原始 routing xml：${OriginalPaths.routingXml}")
             } else if (trimmed.startsWith("ORIGINAL_BACKUP=")) {
                 OriginalPaths.originalConf = trimmed.substringAfter('=').trim()
-                Log.d(TAG, "解析到原始 conf：${OriginalPaths.originalConf}")
             }
         }
     }
@@ -301,8 +274,7 @@ object CardManager {
      * 加入一张卡片。
      *
      * @param name 卡片名称
-     * @param detail 副标题
-     * @param number 展示用卡号
+     * @param detail 备注
      * @param color 卡片颜色（ARGB Long）
      * @param type IC 卡类型
      * @param dumpBytes 完整 dump 字节数组（1024 或 4096 字节）
@@ -311,7 +283,6 @@ object CardManager {
     suspend fun addCard(
         name: String,
         detail: String,
-        number: String,
         color: Long,
         type: IcCardType,
         dumpBytes: ByteArray,
@@ -323,27 +294,23 @@ object CardManager {
         val dumpFile = File(icDir, "$cardId.dump")
         try {
             dumpFile.writeBytes(dumpBytes)
-            Log.d(TAG, "写入 dump 文件：${dumpFile.absolutePath} (${dumpBytes.size} bytes)")
         } catch (e: IOException) {
-            Log.e(TAG, "写入 dump 文件失败：${e.message}")
+            Log.e(TAG, "Failed to write card dump file: ${e.message}", e)
             return@withCards null
         }
 
         // 从 dump Block 0 解析 UID/SAK/ATQA
         val parsed = parseDumpHeader(dumpBytes, type)
         if (parsed == null) {
-            Log.e(TAG, "dump 文件头部解析失败")
             dumpFile.delete()
             return@withCards null
         }
         val (uid, sak, atqa) = parsed
-        Log.i(TAG, "解析 dump：uid=$uid, sak=0x${"%02X".format(sak)}, atqa=${atqa.joinToString("") { "%02X".format(it) }}")
 
         val meta = CardMeta(
             id = cardId,
             name = name,
             detail = detail,
-            number = number,
             color = color,
             type = type,
             dumpFilePath = "ic/$cardId.dump",
@@ -357,7 +324,6 @@ object CardManager {
         persistCards(newList)
         _cardsMeta.value = newList
         refreshCardsUi()
-        Log.i(TAG, "添加卡片：$cardId（${newList.size} 张）")
         cardId
     }
 
@@ -366,7 +332,6 @@ object CardManager {
      */
     suspend fun removeCard(cardId: String): Boolean = withCards {
         val meta = _cardsMeta.value.firstOrNull { it.id == cardId } ?: run {
-            Log.w(TAG, "删除卡片：未找到 id=$cardId")
             return@withCards false
         }
         // 先确认硬件已还原，再删除当前卡；还原失败时保留卡片和激活状态。
@@ -380,9 +345,8 @@ object CardManager {
         // 元数据落盘后再删除 dump，避免保存失败时只剩下无效卡片。
         val dumpFile = File(appContext.filesDir, meta.dumpFilePath)
         if (dumpFile.exists() && !dumpFile.delete()) {
-            Log.w(TAG, "删除 dump 文件失败：${dumpFile.absolutePath}")
+            Log.w(TAG, "Failed to delete card dump file: ${dumpFile.absolutePath}")
         }
-        Log.i(TAG, "删除卡片：$cardId（剩余 ${newList.size} 张）")
 
         true
     }
@@ -394,26 +358,22 @@ object CardManager {
         cardId: String,
         name: String? = null,
         detail: String? = null,
-        number: String? = null,
         color: Long? = null,
     ): Boolean = withCards {
         val list = _cardsMeta.value.toMutableList()
         val idx = list.indexOfFirst { it.id == cardId }
         if (idx < 0) {
-            Log.w(TAG, "更新卡片：未找到 id=$cardId")
             return@withCards false
         }
         val old = list[idx]
         list[idx] = old.copy(
             name = name ?: old.name,
             detail = detail ?: old.detail,
-            number = number ?: old.number,
             color = color ?: old.color,
         )
         persistCards(list)
         _cardsMeta.value = list
         refreshCardsUi()
-        Log.i(TAG, "更新卡片：$cardId")
         true
     }
 
@@ -422,7 +382,7 @@ object CardManager {
         val meta = _cardsMeta.value.firstOrNull { it.id == cardId } ?: return@withCards null
         val dumpFile = File(appContext.filesDir, meta.dumpFilePath)
         if (!dumpFile.exists()) {
-            Log.w(TAG, "dump 文件不存在：${dumpFile.absolutePath}")
+            Log.w(TAG, "Card dump file is missing: ${dumpFile.absolutePath}")
             return@withCards null
         }
         IcCardData(
@@ -443,7 +403,6 @@ object CardManager {
             prefs[KEY_CARDS_META] = json
             prefs[KEY_ACTIVE_CARD] = _activeCardId.value
         }
-        Log.d(TAG, "持久化卡片元数据完成")
     }
 
     private fun encodeCardMetaList(list: List<CardMeta>): String = JSONArray().apply {
@@ -453,7 +412,6 @@ object CardManager {
                     .put("id", m.id)
                     .put("name", m.name)
                     .put("detail", m.detail)
-                    .put("number", m.number)
                     .put("color", m.color)
                     .put("type", m.type.name)
                     .put("dumpFilePath", m.dumpFilePath)
@@ -475,7 +433,6 @@ object CardManager {
                         id = o.optString("id"),
                         name = o.optString("name"),
                         detail = o.optString("detail"),
-                        number = o.optString("number"),
                         color = o.optLong("color", 0xFF146C65),
                         type = runCatching { IcCardType.valueOf(o.optString("type")) }.getOrDefault(IcCardType.MIFARE_CLASSIC_1K),
                         dumpFilePath = o.optString("dumpFilePath"),
@@ -551,7 +508,7 @@ object CardManager {
             if (!vibrator.hasVibrator()) return
             vibrator.vibrate(VibrationEffect.createOneShot(50L, VibrationEffect.DEFAULT_AMPLITUDE))
         } catch (e: Exception) {
-            Log.w(TAG, "卡片已修改，但震动反馈不可用：${e.message}")
+            Log.w(TAG, "Card configuration changed, but vibration feedback is unavailable: ${e.message}", e)
         }
     }
 
@@ -567,16 +524,12 @@ object CardManager {
         val module = Config.selectedModule.value
         val routingTarget = "${module.moduleDir}/system/etc/nfc_rule_configs.xml"
         val confTarget = "${module.moduleDir}/system/vendor/etc/libnfc-nxp.conf"
-        Log.i(TAG, "还原原始：${OriginalPaths.routingXml} → $routingTarget")
-        Log.i(TAG, "还原原始：${OriginalPaths.originalConf} → $confTarget")
 
         // 用 cp 原地覆盖（保留 inode，符合 Magic Mount-rs 要求）
         val r1 = runSuCommand("cp '${OriginalPaths.routingXml}' '$routingTarget'")
         val r2 = runSuCommand("cp '${OriginalPaths.originalConf}' '$confTarget'")
-        Log.d(TAG, "cp routing exit=${r1.exitCode} out=${r1.stdout.take(100)} err=${r1.stderr.take(200)}")
-        Log.d(TAG, "cp conf exit=${r2.exitCode} out=${r2.stdout.take(100)} err=${r2.stderr.take(200)}")
-        if (!r1.success) Log.e(TAG, "还原 routing xml 失败")
-        if (!r2.success) Log.e(TAG, "还原 conf 失败")
+        if (!r1.success) Log.e(TAG, "Failed to restore routing configuration (exit=${r1.exitCode}): ${r1.stderr.take(300)}")
+        if (!r2.success) Log.e(TAG, "Failed to restore NFC configuration (exit=${r2.exitCode}): ${r2.stderr.take(300)}")
 
         val ok = r1.success && r2.success
         if (ok) refreshNfc()
@@ -596,23 +549,18 @@ object CardManager {
         val routingTarget = "${module.moduleDir}/system/etc/nfc_rule_configs.xml"
         val confTarget = "${module.moduleDir}/system/vendor/etc/libnfc-nxp.conf"
 
-        Log.i(TAG, "applyCard uid=${meta.uid} sak=0x${"%02X".format(meta.sak)} atqa=${meta.atqa}")
-        Log.d(TAG, "routing: ${OriginalPaths.routingXml} → $routingTarget")
-        Log.d(TAG, "conf:    ${OriginalPaths.originalConf} → $confTarget")
 
         // 1) 总是从原始备份读取，把 eSE 路由改为 DH，写入模块挂载路径
-        Log.i(TAG, "修改 nfc_rule_configs.xml（eSE → DH）")
         val rRouting = rewriteRoutingXml(OriginalPaths.routingXml, routingTarget)
         if (!rRouting) {
-            Log.e(TAG, "修改 routing xml 失败，中止切换")
+            Log.e(TAG, "Failed to update routing configuration; card switch aborted")
             return@withContext false
         }
 
         // 2) 总是从原始备份读取，写入 UID + 默认路由 + NXP_CORE_CONF / NXP_CORE_RF_FIELD
-        Log.i(TAG, "修改 libnfc-nxp.conf")
         val rConf = rewriteNxpConf(OriginalPaths.originalConf, confTarget, meta)
         if (!rConf) {
-            Log.e(TAG, "修改 conf 失败，中止切换")
+            Log.e(TAG, "Failed to update NFC configuration; card switch aborted")
             return@withContext false
         }
 
@@ -632,17 +580,15 @@ object CardManager {
     private suspend fun rewriteRoutingXml(sourcePath: String, targetPath: String): Boolean = withContext(Dispatchers.IO) {
         // 1. cat 原始备份到本地临时文件
         val tmp = File(appContext.cacheDir, "nfc_rule_configs.xml.tmp")
-        Log.d(TAG, "rewriteRoutingXml: cat '$sourcePath'")
         val cat = runSuCommand("cat '$sourcePath'")
         if (!cat.success) {
-            Log.e(TAG, "读取 routing xml 失败（exit=${cat.exitCode}）：${cat.stderr.take(300)}")
+            Log.e(TAG, "Failed to read routing configuration (exit=${cat.exitCode}): ${cat.stderr.take(300)}")
             return@withContext false
         }
         if (cat.stdout.isBlank()) {
-            Log.e(TAG, "routing xml 读取结果为空，检查路径是否存在：$sourcePath")
+            Log.e(TAG, "Routing configuration is empty: $sourcePath")
             return@withContext false
         }
-        Log.d(TAG, "routing xml 读取成功（${cat.stdout.length} 字符）")
         tmp.writeBytes(cat.stdout.toByteArray())
 
         // 2. 本地替换 eSE → DH
@@ -651,7 +597,6 @@ object CardManager {
         val hasRouteIsoDep  = "route_iso_dep=\"eSE\""       in originalText
         val hasRouteTech    = "route_tech=\"eSE\""          in originalText
         val hasRouteSysCode = "route_system_code=\"eSE\""   in originalText
-        Log.d(TAG, "routing xml pattern命中：route_aid=$hasRouteAid route_iso_dep=$hasRouteIsoDep route_tech=$hasRouteTech route_system_code=$hasRouteSysCode")
 
         val newText = originalText
             .replace("route_aid=\"eSE\"",         "route_aid=\"DH\"")
@@ -660,20 +605,18 @@ object CardManager {
             .replace("route_system_code=\"eSE\"",  "route_system_code=\"DH\"")
 
         if (newText == originalText) {
-            Log.w(TAG, "routing xml 无替换命中（可能路由已是 DH 或原始文件格式不符预期）")
+            Log.w(TAG, "No routing entries were updated; the source may already use DH or have an unsupported format")
         }
         tmp.writeText(newText)
 
         // 3. 通过 su cat 原地覆盖目标文件（保留 inode，符合 Magic Mount-rs 要求）
         val pushCmd = "cat '${tmp.absolutePath}' > '$targetPath'"
-        Log.d(TAG, "rewriteRoutingXml: push → '$targetPath'")
         val push = runSuCommand(pushCmd)
         tmp.delete()
         if (!push.success) {
-            Log.e(TAG, "写回 routing xml 失败（exit=${push.exitCode}）：${push.stderr.take(300)}")
+            Log.e(TAG, "Failed to write routing configuration (exit=${push.exitCode}): ${push.stderr.take(300)}")
             return@withContext false
         }
-        Log.i(TAG, "routing xml 修改完成 → $targetPath")
         true
     }
 
@@ -692,26 +635,23 @@ object CardManager {
      */
     private suspend fun rewriteNxpConf(sourcePath: String, targetPath: String, meta: CardMeta): Boolean = withContext(Dispatchers.IO) {
         val tmp = File(appContext.cacheDir, "libnfc-nxp.conf.tmp")
-        Log.d(TAG, "rewriteNxpConf: cat '$sourcePath'")
         val cat = runSuCommand("cat '$sourcePath'")
         if (!cat.success) {
-            Log.e(TAG, "读取 conf 失败（exit=${cat.exitCode}）：${cat.stderr.take(300)}")
+            Log.e(TAG, "Failed to read NFC configuration (exit=${cat.exitCode}): ${cat.stderr.take(300)}")
             return@withContext false
         }
         if (cat.stdout.isBlank()) {
-            Log.e(TAG, "conf 读取结果为空，检查路径是否存在：$sourcePath")
+            Log.e(TAG, "NFC configuration is empty: $sourcePath")
             return@withContext false
         }
-        Log.d(TAG, "conf 读取成功（${cat.stdout.length} 字符）")
         tmp.writeBytes(cat.stdout.toByteArray())
 
         val uidBytes = hexToBytes(meta.uid)
         val uidLen = uidBytes.size
         if (uidLen !in setOf(4, 7, 10)) {
-            Log.e(TAG, "UID 长度不合法：$uidLen（uid=${meta.uid}）")
+            Log.e(TAG, "Invalid card UID length: $uidLen")
             return@withContext false
         }
-        Log.d(TAG, "准备写入 UID：len=$uidLen hex=${uidBytes.joinToString(" ") { "%02X".format(it) }}")
 
         val originalText = tmp.readText()
         var changedAny = false
@@ -731,10 +671,7 @@ object CardManager {
             val to   = "$key=0x00"
             if (from in newText) {
                 newText = newText.replace(from, to)
-                Log.d(TAG, "conf 命中并替换：$from → $to")
                 changedAny = true
-            } else if ("$key=0x00" !in newText) {
-                Log.w(TAG, "conf 未命中默认路由：$key（既无 =0x01 也无 =0x00）")
             }
         }
 
@@ -761,10 +698,9 @@ object CardManager {
             "NXP_CORE_RF_FIELD={\n    $rfFieldNewInner\n}"
         }
         if (rfFieldMatched) {
-            Log.d(TAG, "conf 命中 NXP_CORE_RF_FIELD 块，已重写")
             changedAny = true
         } else {
-            Log.w(TAG, "conf 未命中 NXP_CORE_RF_FIELD 块，UID 未写入 RF_FIELD")
+            Log.w(TAG, "NXP_CORE_RF_FIELD block not found; UID was not written to RF_FIELD")
         }
 
         // ── 3) NXP_CORE_CONF：更新 payload 长度 + 0x30/0x31 + LA_NFCID1 ──
@@ -788,21 +724,21 @@ object CardManager {
                 )
                 payloadLenMatched = true
             } else {
-                Log.w(TAG, "conf NXP_CORE_CONF 外层长度未命中 20, 02, 33, 11,")
+                Log.w(TAG, "NXP_CORE_CONF payload length pattern was not found")
             }
             // LA_BIT_FRAME_SDD 0x30: 08 → 04
             if ("30, 01, 08," in block) {
                 block = block.replace("30, 01, 08,", "30, 01, 04,")
                 bitFrameMatched = true
             } else if ("30, 01, 04," !in block) {
-                Log.w(TAG, "conf LA_BIT_FRAME_SDD 未命中 30, 01, 08,")
+                Log.w(TAG, "LA_BIT_FRAME_SDD pattern was not found")
             }
             // LA_PLATFORM_CONFIG 0x31: 03 → 00
             if ("31, 01, 03," in block) {
                 block = block.replace("31, 01, 03,", "31, 01, 00,")
                 platformMatched = true
             } else if ("31, 01, 00," !in block) {
-                Log.w(TAG, "conf LA_PLATFORM_CONFIG 未命中 31, 01, 03,")
+                Log.w(TAG, "LA_PLATFORM_CONFIG pattern was not found")
             }
             // LA_NFCID1 0x33: "33, 00" → "33, <len>, <uid>"
             val uidTail = buildString {
@@ -815,35 +751,30 @@ object CardManager {
                 block = block.replace("33, 00,", "$uidTail,")
                 nfcid1Matched = true
             } else {
-                Log.w(TAG, "conf LA_NFCID1 未命中 33, 00,（可能已被上次修改占用，需从原始备份读取）")
+                Log.w(TAG, "LA_NFCID1 pattern was not found; read from the original backup")
             }
             block
         }
-        Log.d(TAG, "conf NXP_CORE_CONF: blockMatched=$confBlockMatched payloadLen=$payloadLenMatched bitFrame=$bitFrameMatched platform=$platformMatched nfcid1=$nfcid1Matched")
         if (confBlockMatched && (payloadLenMatched || bitFrameMatched || platformMatched || nfcid1Matched)) {
             changedAny = true
         }
         if (!confBlockMatched) {
-            Log.w(TAG, "conf 未命中 NXP_CORE_CONF 块，UID 未写入 CORE_CONF")
+            Log.w(TAG, "NXP_CORE_CONF block not found; UID was not written to CORE_CONF")
         }
 
         if (!changedAny) {
-            Log.w(TAG, "conf 无任何变化，可能 pattern 均未命中（请检查原始备份文件格式）")
-        } else {
-            Log.i(TAG, "conf 修改完成（uidLen=$uidLen, payloadNew=0x${"%02X".format(confPayloadNew)}, rfPayload=0x${"%02X".format(rfFieldPayload)}）")
+            Log.w(TAG, "NFC configuration was not changed; no supported patterns were found in the original backup")
         }
         tmp.writeText(newText)
 
         // 写回（保留 inode）
         val pushCmd = "cat '${tmp.absolutePath}' > '$targetPath'"
-        Log.d(TAG, "rewriteNxpConf: push → '$targetPath'")
         val push = runSuCommand(pushCmd)
         tmp.delete()
         if (!push.success) {
-            Log.e(TAG, "写回 conf 失败（exit=${push.exitCode}）：${push.stderr.take(300)}")
+            Log.e(TAG, "Failed to write NFC configuration (exit=${push.exitCode}): ${push.stderr.take(300)}")
             return@withContext false
         }
-        Log.i(TAG, "conf 写入完成 → $targetPath")
         true
     }
 
@@ -852,16 +783,11 @@ object CardManager {
      * su -c 'cmd nfc disable-nfc' → sleep 2 → su -c 'cmd nfc enable-nfc'
      */
     private suspend fun refreshNfc() = withContext(Dispatchers.IO) {
-        Log.i(TAG, "刷新 NFC 状态…")
         val r1 = runSuCommand("cmd nfc disable-nfc")
-        Log.d(TAG, "disable-nfc exit=${r1.exitCode} out=${r1.stdout.take(100)} err=${r1.stderr.take(100)}")
         Thread.sleep(2000)
         val r2 = runSuCommand("cmd nfc enable-nfc")
-        Log.d(TAG, "enable-nfc exit=${r2.exitCode} out=${r2.stdout.take(100)} err=${r2.stderr.take(100)}")
-        if (r1.success && r2.success) {
-            Log.i(TAG, "NFC 已刷新")
-        } else {
-            Log.w(TAG, "NFC 刷新可能未完全成功（disable=${r1.exitCode}, enable=${r2.exitCode}）")
+        if (!r1.success || !r2.success) {
+            Log.w(TAG, "NFC refresh may have failed (disable exit=${r1.exitCode}, enable exit=${r2.exitCode})")
         }
     }
 
@@ -879,11 +805,11 @@ object CardManager {
     private fun parseDumpHeader(bytes: ByteArray, type: IcCardType): Triple<String, Byte, ByteArray>? {
         val need = if (type == IcCardType.MIFARE_CLASSIC_1K) 1024 else 4096
         if (bytes.size < 8) {
-            Log.w(TAG, "dump 字节数不足：${bytes.size}")
+            Log.w(TAG, "Card dump is too short to contain a header: ${bytes.size} bytes")
             return null
         }
         if (bytes.size != need) {
-            Log.w(TAG, "dump 字节数与类型不符：${bytes.size} (期望 $need)，仍尝试解析")
+            Log.w(TAG, "Card dump size does not match its card type: got ${bytes.size} bytes, expected $need; attempting to parse")
         }
         return try {
             val uid = bytes.copyOfRange(0, 4)
@@ -892,7 +818,7 @@ object CardManager {
             val uidHex = uid.joinToString("") { "%02X".format(it) }
             Triple(uidHex, sak, atqa)
         } catch (e: Exception) {
-            Log.e(TAG, "解析 dump 头部异常：${e.message}")
+            Log.e(TAG, "Failed to parse card dump header", e)
             null
         }
     }
@@ -902,12 +828,16 @@ object CardManager {
     /**
      * 在软件启动时记录"原始"配置文件路径。
      *
-     * 首先用 [checkAvailability] 中 `nfcconf status` 解析；若尚未拿到，则使用模块默认路径。
-     * 注意：原始文件路径来自模块 backup 目录，会随设备固件变（因此以 nfcconf status 为准）。
+     * nfcconf status 仅用于解析备份路径，失败时保留默认值，不作为模块是否安装的依据。
      */
-    private suspend fun refreshOriginalPaths() {
-        // 默认值已设置；若 status 已解析则跳过
-        Log.d(TAG, "原始路径：routing=${OriginalPaths.routingXml}, conf=${OriginalPaths.originalConf}")
+    private suspend fun refreshOriginalPaths() = withContext(Dispatchers.IO) {
+        val module = Config.selectedModule.value
+        val result = runSuCommand("'${module.nfcconfBin}' status")
+        if (result.success && result.stdout.isNotBlank()) {
+            parseStatusPaths(result.stdout)
+        } else {
+            Log.w(TAG, "Failed to read original configuration paths; keeping defaults (exit=${result.exitCode}): ${result.stderr.take(300)}")
+        }
     }
 }
 
@@ -931,7 +861,7 @@ private fun runSuCommand(command: String): SuResult {
         val code = process.waitFor()
         SuResult(code, stdout, stderr)
     } catch (e: Exception) {
-        Log.e(TAG, "su 命令异常：$command — ${e.message}")
+        Log.e(TAG, "Root command failed: $command (${e.message})", e)
         SuResult(-1, "", e.message ?: "exception")
     }
 }

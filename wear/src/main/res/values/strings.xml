@@ -3,7 +3,9 @@
 
     <!-- Error dialog -->
     <string name="error_no_root_title">Root required</string>
-    <string name="error_no_root_body">WearNFC needs root access to emulate NFC cards. Please grant root via KernelSU or BakaSU and try again.</string>
+    <string name="error_no_root_body">WearNFC needs root access to emulate NFC cards. Please grant WearNFC root access in your root manager and try again.</string>
+    <string name="error_no_supported_module_title">No supported module installed</string>
+    <string name="error_no_supported_module_body">The selected NFC module was not detected. Please install and enable the corresponding module, then try again.</string>
     <string name="error_dismiss">Got it</string>
 
     <!-- Restore page -->
@@ -24,6 +26,7 @@
     <string name="about_title">About</string>
     <string name="about_version">Version</string>
     <string name="about_app_name">WearNFC</string>
+    <string name="about_author">Author: gohj99</string>
     <string name="about_desc">NFC card emulation for Wear OS</string>
 
     <!-- Tile -->
@@ -34,7 +37,8 @@
     <!-- Add card flow -->
     <string name="add_card_title">Add Card</string>
     <string name="add_card_method_watch">Add from Watch</string>
-    <string name="add_card_method_phone">From Phone (Soon)</string>
+    <string name="add_card_method_phone">Add from Phone</string>
+    <string name="add_card_phone_open_failed">Could not open WearNFC on your phone. Check the connection and that the phone app is installed.</string>
     <string name="add_card_scan_title">Hold Card Near Watch</string>
     <string name="add_card_scan_hint">Hold your card against the back of the watch</string>
     <string name="add_card_reading_title">Reading…</string>
@@ -53,6 +57,8 @@
     <string name="card_detail_uid">UID</string>
     <string name="card_detail_added_at">Added</string>
     <string name="card_detail_name">Name</string>
+    <string name="card_detail_detail">Note</string>
+    <string name="card_detail_color">Color</string>
     <string name="card_detail_save">Save</string>
     <string name="card_detail_unknown">Unknown</string>
 </resources>

@@ -3,6 +3,7 @@ package com.gohj99.wearnfc.ui.addcard
 import android.app.Activity
 import android.nfc.NfcAdapter
 import android.nfc.Tag
+import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -12,6 +13,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -19,7 +21,12 @@ import androidx.wear.compose.foundation.pager.HorizontalPager
 import androidx.wear.compose.foundation.pager.rememberPagerState
 import androidx.wear.compose.material3.AnimatedPage
 import androidx.wear.compose.material3.AppScaffold
+import androidx.wear.compose.material3.OpenOnPhoneDialog
+import androidx.wear.compose.material3.OpenOnPhoneDialogDefaults
+import androidx.wear.compose.material3.openOnPhoneDialogCurvedText
+import com.gohj99.wearnfc.R
 import com.gohj99.wearnfc.data.IcCardType
+import com.gohj99.wearnfc.sync.WatchCommunication
 import com.gohj99.wearnfc.utils.LocalGlobalAppState
 import kotlinx.coroutines.launch
 
@@ -30,6 +37,7 @@ fun AddCardScreen() {
     val pagerState = rememberPagerState(initialPage = 0) { 4 }
     val activity = LocalContext.current as Activity
     val nfcAdapter = remember { NfcAdapter.getDefaultAdapter(activity) }
+    var showOpenOnPhone by rememberSaveable { mutableStateOf(false) }
 
     // 保留检测到的标签，供 Page2 使用
     var processingTag by remember { mutableStateOf<Tag?>(null) }
@@ -43,9 +51,8 @@ fun AddCardScreen() {
         appState.detectedNfcTag.value = null
     }
 
-    // 离开整个 AddCardScreen 时才关闭 Reader Mode 并清理标签。
-    // 注意：页内切换（Page1 → Page2）不关闭 Reader Mode，
-    // 因为 AddCardPage2 的 readCardDump() 仍需要活跃的 NFC 连接读取扇区数据。
+    // 离开添加流程时兜底关闭 Reader Mode 并清理标签。
+    // Page1 → Page2 期间保持开启，保证读取扇区时 NFC 连接仍然可用。
     DisposableEffect(Unit) {
         onDispose {
             try { nfcAdapter?.disableReaderMode(activity) } catch (_: Exception) {}
@@ -53,9 +60,7 @@ fun AddCardScreen() {
         }
     }
 
-    // Reader Mode 在扫描页（Page 1）开启；导航到其他页面时不主动关闭，
-    // 确保 readCardDump() 在 Page 2 仍可连接 Tag。
-    // 离开 AddCardScreen 时由上面的 DisposableEffect(Unit) 统一关闭。
+    // 读卡页保持 Reader Mode，其他页面不占用手表 NFC。
     LaunchedEffect(pagerState.currentPage) {
         if (pagerState.currentPage == 1) {
             try {
@@ -66,6 +71,9 @@ fun AddCardScreen() {
                     null,
                 )
             } catch (_: Exception) {}
+        } else if (pagerState.currentPage != 2) {
+            try { nfcAdapter?.disableReaderMode(activity) } catch (_: Exception) {}
+            appState.detectedNfcTag.value = null
         }
     }
 
@@ -91,7 +99,16 @@ fun AddCardScreen() {
                     AddCardPage0(
                         onWatchAdd = {
                             coroutineScope.launch { pagerState.animateScrollToPage(1) }
-                        }
+                        },
+                        onPhoneAdd = {
+                            WatchCommunication.openPhoneApp(
+                                context = activity,
+                                onOpened = { showOpenOnPhone = true },
+                                onOpenFailed = {
+                                    Toast.makeText(activity, R.string.add_card_phone_open_failed, Toast.LENGTH_LONG).show()
+                                },
+                            )
+                        },
                     )
                 }
                 1 -> AnimatedPage(pageIndex = page, pagerState = pagerState) {
@@ -123,4 +140,12 @@ fun AddCardScreen() {
             }
         }
     }
+
+    val openOnPhoneText = OpenOnPhoneDialogDefaults.text
+    val openOnPhoneTextStyle = OpenOnPhoneDialogDefaults.curvedTextStyle
+    OpenOnPhoneDialog(
+        visible = showOpenOnPhone,
+        onDismissRequest = { showOpenOnPhone = false },
+        curvedText = { openOnPhoneDialogCurvedText(openOnPhoneText, openOnPhoneTextStyle) },
+    )
 }

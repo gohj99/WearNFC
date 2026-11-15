@@ -32,8 +32,6 @@ import androidx.wear.compose.material3.Text
 import com.gohj99.wearnfc.R
 import com.gohj99.wearnfc.data.IcCardUi
 import com.gohj99.wearnfc.runtime.CardManager
-import com.gohj99.wearnfc.ui.Destinations
-import com.gohj99.wearnfc.ui.LocalNavController
 import kotlin.math.sqrt
 
 /** 卡片切换状态，控制顶部状态文字的显示。 */
@@ -54,8 +52,8 @@ internal fun CardPage(
     index: Int,
     count: Int,
     isSelected: Boolean,
+    onOpenDetail: () -> Unit,
 ) {
-    val navController = LocalNavController.current
     var switchState by remember(card.id) { mutableStateOf(SwitchState.Applying) }
 
     LaunchedEffect(card.id, isSelected) {
@@ -118,7 +116,7 @@ internal fun CardPage(
                         )
                     )
                     .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(28.dp))
-                    .clickable { navController?.navigate(Destinations.cardDetail(card.id)) }
+                    .clickable(onClick = onOpenDetail)
                     .padding(18.dp)
             ) {
                 Column(
@@ -141,14 +139,25 @@ internal fun CardPage(
                         )
                     }
 
-                    // 用户自定义卡片名称
-                    Text(
-                        text = card.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    // 用户自定义卡片名称与备注
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = card.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (card.detail.isNotBlank()) {
+                            Text(
+                                text = card.detail,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.78f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
 

@@ -13,8 +13,8 @@ android {
         applicationId = "com.gohj99.wearnfc"
         minSdk = 30
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.5"
 
     }
 
@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.androidx.tiles.tooling.preview)
     implementation(libs.androidx.watchface.complications.data.source.ktx)
     implementation(libs.androidx.wear.tooling.preview)
+    implementation(libs.androidx.wear.remote.interactions)
     implementation(libs.compose.material3)
     implementation(libs.compose.navigation)
     implementation(libs.compose.ui.tooling)

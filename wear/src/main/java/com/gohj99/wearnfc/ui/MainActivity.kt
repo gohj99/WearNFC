@@ -6,39 +6,45 @@ import android.nfc.NfcAdapter
 import android.nfc.cardemulation.CardEmulation
 import android.os.Bundle
 import android.util.Log
-import com.gohj99.wearnfc.nfc.WearNfcHostApduService
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavHostState
-import com.gohj99.wearnfc.runtime.CardManager
-import com.gohj99.wearnfc.ui.CardDetailPage
+import com.gohj99.wearnfc.nfc.WearNfcHostApduService
 import com.gohj99.wearnfc.ui.addcard.AddCardScreen
 import com.gohj99.wearnfc.ui.main.MainScreen
 import com.gohj99.wearnfc.ui.main.NfcModulePage
 import com.gohj99.wearnfc.ui.theme.WearNFCTheme
 import com.gohj99.wearnfc.utils.GlobalAppState
 import com.gohj99.wearnfc.utils.LocalGlobalAppState
+import com.gohj99.wearnfc.utils.MainViewModel
 
 class MainActivity : ComponentActivity() {
+    private val viewModel: MainViewModel by viewModels()
     private var nfcAdapter: NfcAdapter? = null
     private var cardEmulation: CardEmulation? = null
     private var appState: GlobalAppState? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 初始化启动页
+        val splashScreen = installSplashScreen()
+        // 设置停留条件 (Condition)
+        splashScreen.setKeepOnScreenCondition {
+            // 只要 isLoading.value 是 true，就会一直显示启动图标
+            viewModel.isLoading.value
+        }
         super.onCreate(savedInstanceState)
+
         nfcAdapter = NfcAdapter.getDefaultAdapter(this)
         cardEmulation = nfcAdapter?.let { CardEmulation.getInstance(it) }
         setContent {
@@ -51,21 +57,7 @@ class MainActivity : ComponentActivity() {
                 appState.navController = navController
                 this@MainActivity.appState = appState
 
-                // CardManager.isAvailable 由 WearNFC.onCreate 触发的 checkAvailability() 写入
-                val isAvailable by CardManager.isAvailable.collectAsState()
-
-                // 当前要显示的错误；置 null 关闭对话框
-                var currentError by rememberSaveable { mutableStateOf<AppError?>(null) }
-
-                // isAvailable 变为 false（且已完成首次检测）时弹出 NoRoot 提示
-                LaunchedEffect(isAvailable) {
-                    if (!isAvailable) {
-                        currentError = AppError.NoRoot
-                    } else {
-                        // 可用后清除之前的 root 错误
-                        if (currentError is AppError.NoRoot) currentError = null
-                    }
-                }
+                val startupError by viewModel.startupError.collectAsState()
 
                 CompositionLocalProvider(
                     LocalGlobalAppState provides appState,
@@ -98,8 +90,8 @@ class MainActivity : ComponentActivity() {
 
                     // 全局错误对话框，覆盖在所有页面之上
                     ErrorDialog(
-                        error = currentError,
-                        onDismiss = { currentError = null },
+                        error = startupError,
+                        onDismiss = viewModel::dismissStartupError,
                     )
                 }
             }
@@ -110,7 +102,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         // singleTask 保证单实例；NFC tag 由 AddCardScreen Reader Mode 直接读取，此处不处理。
-        Log.d("MainActivity", "onNewIntent: action=${intent.action}")
     }
 
     override fun onResume() {
@@ -123,9 +114,8 @@ class MainActivity : ComponentActivity() {
                 this,
                 ComponentName(this, WearNfcHostApduService::class.java),
             )
-            Log.d("MainActivity", "setPreferredService ok")
         } catch (e: Exception) {
-            Log.w("MainActivity", "setPreferredService failed: ${e.message}")
+            Log.w("MainActivity", "Failed to set the preferred NFC service", e)
         }
     }
 

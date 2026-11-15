@@ -26,7 +26,7 @@ import com.gohj99.wearnfc.R
 
 /** 第 0 页：选择添加方式。 */
 @Composable
-internal fun AddCardPage0(onWatchAdd: () -> Unit) {
+internal fun AddCardPage0(onWatchAdd: () -> Unit, onPhoneAdd: () -> Unit) {
     val listState = rememberTransformingLazyColumnState()
     val overscrollEffect = rememberOverscrollEffect()
     val transformationSpec = rememberTransformationSpec()
@@ -66,8 +66,7 @@ internal fun AddCardPage0(onWatchAdd: () -> Unit) {
             }
             item {
                 FilledTonalButton(
-                    onClick = {},
-                    enabled = false,
+                    onClick = onPhoneAdd,
                     transformation = SurfaceTransformation(transformationSpec),
                     modifier = Modifier
                         .fillMaxWidth()

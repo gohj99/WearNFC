@@ -64,7 +64,7 @@ UID 不是 4 字节的卡片、不支持的 NFC 技术类型，以及不支持�
 ### 3. 添加和使用卡片
 
 1. 在手机端点击“添加卡片”，将卡片贴近手机的 NFC 感应区域。
-2. 读取时保持卡片不动。读取完成后填写名称、备注、展示卡号和颜色，再保存到手表。
+2. 读取时保持卡片不动。读取完成后填写名称、备注和颜色，再保存到手表。
 3. 点击“设为当前卡片”，将卡片应用到手表。
 4. 使用手表应用或 Wear OS Tile 在已保存的卡片之间切换。
 5. 选择“原始 NFC”，停止模拟并恢复手表原本的 NFC 配置。
@@ -104,7 +104,7 @@ shared/   共享卡片模型、NFC dump 读取器，以及手机/手表通信协
 
 ### 手机提示 NFC 模块不可用
 
-确认手表已经安装并启用 [`galaxy_watch_nfc_provide`](https://github.com/gohj99/galaxy_watch_nfc_provide/) 模块，WearNFC 已获得 Root 权限，且应用中选择的是手表实际安装的模块。手表应用启动时会执行模块的 `nfcconf status` 来检查可用性。
+确认手表已经安装并启用 [`galaxy_watch_nfc_provide`](https://github.com/gohj99/galaxy_watch_nfc_provide/) 模块，WearNFC 已获得 Root 权限，且应用中选择的是手表实际安装的模块。手表应用启动时通过 `su -c "test -d /data/adb/modules/galaxy_watch_nfc_provide"` 检查模块目录是否存在；启动页会保留到检测完成，再进入界面并按检测结果决定是否弹出未安装提示。`nfcconf status` 仅用于读取原始配置备份路径，不影响模块安装检测结果。
 
 ### 手机无法连接手表
 
