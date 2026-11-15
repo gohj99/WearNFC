@@ -1,5 +1,7 @@
 # WearNFC
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 WearNFC is an NFC card manager and emulator for Wear OS watches. It includes a watch app and an Android companion app: read a supported card with the phone, save it to the watch, and switch the watch between saved cards from the phone, the watch UI, or a Wear OS Tile.
 
 ## Required watch module
@@ -121,5 +123,3 @@ Keep the watch awake and confirm that root access and the required module are st
 ## License
 
 This project is distributed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
-
-中文说明：[README.zh-CN.md](README.zh-CN.md)
