@@ -7,6 +7,7 @@ object Destinations {
     const val HOME = "home"
     const val NFC_MODULE = "nfc_module"
     const val ABOUT = "about"
+    const val ADD_CARD = "add_card"
 }
 
 /** NavController 注入点，由 [MainActivity] 在 NavHost 外提供。 */

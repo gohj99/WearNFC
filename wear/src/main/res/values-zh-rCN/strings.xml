@@ -26,4 +26,16 @@
     <string name="about_version">版本</string>
     <string name="about_app_name">WearNFC</string>
     <string name="about_desc">Wear OS NFC 卡片模拟</string>
+
+    <!-- 添加卡片流程 -->
+    <string name="add_card_title">添加卡片</string>
+    <string name="add_card_method_watch">从手表添加</string>
+    <string name="add_card_method_phone">从手机添加（即将上线）</string>
+    <string name="add_card_scan_title">靠近 IC 卡</string>
+    <string name="add_card_scan_hint">请将 IC 卡贴近手表背面</string>
+    <string name="add_card_reading_title">读取中…</string>
+    <string name="add_card_reading_hint">请稍候</string>
+    <string name="add_card_done_title">读取完成</string>
+    <string name="add_card_done_hint">即将自动返回</string>
+    <string name="settings_add_card">添加卡片</string>
 </resources>

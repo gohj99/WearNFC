@@ -68,6 +68,17 @@ internal fun SettingsPage() {
             }
             item {
                 FilledTonalButton(
+                    onClick = { navController?.navigate(Destinations.ADD_CARD) },
+                    transformation = SurfaceTransformation(transformationSpec),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .transformedHeight(this, transformationSpec),
+                ) {
+                    Text(stringResource(R.string.settings_add_card))
+                }
+            }
+            item {
+                FilledTonalButton(
                     onClick = { navController?.navigate(Destinations.ABOUT) },
                     transformation = SurfaceTransformation(transformationSpec),
                     modifier = Modifier

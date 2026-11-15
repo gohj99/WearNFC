@@ -28,4 +28,16 @@
     <string name="about_version">Version</string>
     <string name="about_app_name">WearNFC</string>
     <string name="about_desc">NFC card emulation for Wear OS</string>
+
+    <!-- Add card flow -->
+    <string name="add_card_title">Add Card</string>
+    <string name="add_card_method_watch">Add from Watch</string>
+    <string name="add_card_method_phone">From Phone (Soon)</string>
+    <string name="add_card_scan_title">Hold IC Card</string>
+    <string name="add_card_scan_hint">Hold your IC card against the back of the watch</string>
+    <string name="add_card_reading_title">Reading…</string>
+    <string name="add_card_reading_hint">Please wait</string>
+    <string name="add_card_done_title">Card Added</string>
+    <string name="add_card_done_hint">Returning…</string>
+    <string name="settings_add_card">Add Card</string>
 </resources>
