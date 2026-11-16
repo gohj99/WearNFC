@@ -784,7 +784,7 @@ object CardManager {
      */
     private suspend fun refreshNfc() = withContext(Dispatchers.IO) {
         val r1 = runSuCommand("cmd nfc disable-nfc")
-        Thread.sleep(2000)
+        Thread.sleep(1000)
         val r2 = runSuCommand("cmd nfc enable-nfc")
         if (!r1.success || !r2.success) {
             Log.w(TAG, "NFC refresh may have failed (disable exit=${r1.exitCode}, enable exit=${r2.exitCode})")
