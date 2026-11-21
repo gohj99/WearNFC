@@ -19,6 +19,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -780,11 +781,11 @@ object CardManager {
 
     /**
      * 刷新 NFC 状态（封包函数）。
-     * su -c 'cmd nfc disable-nfc' → sleep 2 → su -c 'cmd nfc enable-nfc'
+     * su -c 'cmd nfc disable-nfc' → 等待配置的时间 → su -c 'cmd nfc enable-nfc'
      */
     private suspend fun refreshNfc() = withContext(Dispatchers.IO) {
         val r1 = runSuCommand("cmd nfc disable-nfc")
-        Thread.sleep(1000)
+        delay(Config.refreshNfcWaitMillis.value.toLong())
         val r2 = runSuCommand("cmd nfc enable-nfc")
         if (!r1.success || !r2.success) {
             Log.w(TAG, "NFC refresh may have failed (disable exit=${r1.exitCode}, enable exit=${r2.exitCode})")

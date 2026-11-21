@@ -24,6 +24,7 @@ import com.gohj99.wearnfc.nfc.WearNfcHostApduService
 import com.gohj99.wearnfc.ui.addcard.AddCardScreen
 import com.gohj99.wearnfc.ui.main.MainScreen
 import com.gohj99.wearnfc.ui.main.NfcModulePage
+import com.gohj99.wearnfc.ui.main.settings.RefreshNfcPage
 import com.gohj99.wearnfc.ui.theme.WearNFCTheme
 import com.gohj99.wearnfc.utils.GlobalAppState
 import com.gohj99.wearnfc.utils.LocalGlobalAppState
@@ -73,6 +74,9 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(Destinations.NFC_MODULE) {
                             NfcModulePage()
+                        }
+                        composable(Destinations.REFRESH_NFC) {
+                            RefreshNfcPage()
                         }
                         composable(Destinations.ABOUT) {
                             AboutPage()

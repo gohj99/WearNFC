@@ -88,6 +88,17 @@ internal fun SettingsPage(
             }
             item {
                 FilledTonalButton(
+                    onClick = { navController?.navigate(Destinations.REFRESH_NFC) },
+                    transformation = SurfaceTransformation(transformationSpec),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .transformedHeight(this, transformationSpec),
+                ) {
+                    Text(stringResource(R.string.settings_refresh_nfc))
+                }
+            }
+            item {
+                FilledTonalButton(
                     onClick = { navController?.navigate(Destinations.ABOUT) },
                     transformation = SurfaceTransformation(transformationSpec),
                     modifier = Modifier

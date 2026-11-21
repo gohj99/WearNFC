@@ -213,7 +213,7 @@ internal fun CardDetailPage(cardId: String) {
                             label = stringResource(R.string.card_detail_detail),
                             value = draftDetail,
                             editing = editingDetail,
-                            singleLine = false,
+                            singleLine = true,
                             focusRequester = focusRequester,
                             onClick = { editingDetail = true },
                             onValueChange = { draftDetail = it.take(120) },

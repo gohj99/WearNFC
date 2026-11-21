@@ -16,7 +16,15 @@
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="settings_module">Emulation settings</string>
+    <string name="settings_refresh_nfc">NFC refresh wait</string>
     <string name="settings_about">About</string>
+
+    <!-- NFC refresh settings -->
+    <string name="refresh_nfc_title">NFC refresh wait</string>
+    <string name="refresh_nfc_description">Time between disabling and enabling NFC.</string>
+    <string name="refresh_nfc_wait_value">Wait time: %1$d ms</string>
+    <string name="refresh_nfc_range">Range: 50-5000 ms</string>
+    <string name="refresh_nfc_save">Save</string>
 
     <!-- NFC module page -->
     <string name="nfc_module_title">Emulation settings</string>
