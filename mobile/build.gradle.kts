@@ -13,8 +13,8 @@ android {
         applicationId = "com.gohj99.wearnfc"
         minSdk = 30
         targetSdk = 37
-        versionCode = 7
-        versionName = "2.4"
+        versionCode = 8
+        versionName = "2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -14,7 +14,7 @@ class CardSwitchTransactionTest {
         var persisted = "A"
         var active = "A"
         var enabled = true
-        var disableFails = false
+        var disableFailures = 0
         var writeFails = false
         var restoreFails = false
         var enableFailures = 0
@@ -25,7 +25,7 @@ class CardSwitchTransactionTest {
 
         override suspend fun disableNfc(): Boolean {
             events += "disable"
-            if (disableFails) return false
+            if (disableFailures-- > 0) return false
             enabled = false
             return true
         }
@@ -72,11 +72,12 @@ class CardSwitchTransactionTest {
         assertTrue(ops.enabled)
     }
 
-    @Test fun failedSecondWriteRestoresBothFilesBeforeEnabling() = runBlocking {
+    @Test fun failedSecondWriteRestoresOriginalConfigurationBeforeEnabling() = runBlocking {
         val ops = Operations().apply { writeFails = true }
         val result = performCardSwitch(ops)
         assertFalse(result.success)
         assertTrue(result.recovered)
+        assertTrue(result.originalRestored)
         assertEquals(listOf("disable", "write", "restore", "enable"), ops.events)
         assertEquals("A", ops.routing)
         assertEquals("A", ops.conf)
@@ -85,19 +86,33 @@ class CardSwitchTransactionTest {
         assertTrue(ops.enabled)
     }
 
-    @Test fun failedDisableDoesNotWriteOrCommit() = runBlocking {
-        val ops = Operations().apply { disableFails = true }
-        assertFalse(performCardSwitch(ops).success)
-        assertEquals(listOf("disable", "enable"), ops.events)
+    @Test fun failedDisableRetriesBeforeRestoringOriginalConfiguration() = runBlocking {
+        val ops = Operations().apply { disableFailures = 1 }
+        val result = performCardSwitch(ops)
+        assertFalse(result.success)
+        assertTrue(result.recovered)
+        assertTrue(result.originalRestored)
+        assertEquals(listOf("disable", "disable", "restore", "enable"), ops.events)
         assertEquals("A", ops.conf)
         assertEquals("A", ops.active)
     }
 
-    @Test fun failedEnableDisablesAgainAndRollsBack() = runBlocking {
+    @Test fun failedDisableStillAttemptsOriginalConfigurationRestore() = runBlocking {
+        val ops = Operations().apply { disableFailures = 2 }
+        val result = performCardSwitch(ops)
+        assertFalse(result.success)
+        assertFalse(result.recovered)
+        assertTrue(result.originalRestored)
+        assertEquals(listOf("disable", "disable", "restore", "enable"), ops.events)
+        assertEquals("A", ops.conf)
+    }
+
+    @Test fun failedEnableDisablesAgainAndRestoresOriginalConfiguration() = runBlocking {
         val ops = Operations().apply { enableFailures = 1 }
         val result = performCardSwitch(ops)
         assertFalse(result.success)
         assertTrue(result.recovered)
+        assertTrue(result.originalRestored)
         assertEquals(listOf("disable", "write", "enable", "disable", "restore", "enable"), ops.events)
         assertEquals("A", ops.conf)
         assertEquals("A", ops.active)
@@ -109,6 +124,7 @@ class CardSwitchTransactionTest {
         val result = performCardSwitch(ops)
         assertFalse(result.success)
         assertFalse(result.recovered)
+        assertFalse(result.originalRestored)
         assertFalse(ops.enabled)
         assertEquals(listOf("disable", "write", "restore"), ops.events)
         assertEquals("A", ops.active)
@@ -119,6 +135,7 @@ class CardSwitchTransactionTest {
         val result = performCardSwitch(ops)
         assertFalse(result.success)
         assertTrue(result.recovered)
+        assertTrue(result.originalRestored)
         assertTrue(result.cause is java.io.IOException)
         assertEquals("A", ops.routing)
         assertEquals("A", ops.conf)

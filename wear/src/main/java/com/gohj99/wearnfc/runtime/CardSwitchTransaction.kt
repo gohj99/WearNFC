@@ -14,10 +14,11 @@ internal interface CardSwitchOperations {
 internal data class CardSwitchResult(
     val success: Boolean,
     val recovered: Boolean,
+    val originalRestored: Boolean = false,
     val cause: Exception? = null,
 )
 
-/** 一旦开始关闭 NFC，就完成写入、恢复和状态提交，不受页面生命周期影响。 */
+/** 一旦开始关闭 NFC，就完成写入、恢复原始配置和状态提交，不受页面生命周期影响。 */
 internal suspend fun performCardSwitch(operations: CardSwitchOperations): CardSwitchResult =
     withContext(NonCancellable) {
         var disabled = false
@@ -36,18 +37,21 @@ internal suspend fun performCardSwitch(operations: CardSwitchOperations): CardSw
             cause = error
         }
 
+        var originalRestored = false
         val recovered = try {
-            if (!disabled) {
-                // 关闭命令失败也可能已产生副作用；文件尚未修改，只恢复 NFC。
-                operations.enableNfc()
-            } else {
-                // 开启命令可能部分成功，回滚前必须重新关闭。
-                (!enableAttempted || operations.disableNfc()) &&
-                    operations.restoreConfiguration() && operations.enableNfc()
-            }
+            // NFC 已重新开启或初次关闭失败时，再尝试关闭后写回原始配置。
+            val nfcDisabled = if (disabled && !enableAttempted) true else operations.disableNfc()
+            originalRestored = operations.restoreConfiguration()
+            val nfcEnabled = originalRestored && operations.enableNfc()
+            nfcDisabled && nfcEnabled
         } catch (error: Exception) {
             if (cause == null) cause = error else cause.addSuppressed(error)
             false
         }
-        CardSwitchResult(success = false, recovered = recovered, cause = cause)
+        CardSwitchResult(
+            success = false,
+            recovered = recovered,
+            originalRestored = originalRestored,
+            cause = cause,
+        )
     }
