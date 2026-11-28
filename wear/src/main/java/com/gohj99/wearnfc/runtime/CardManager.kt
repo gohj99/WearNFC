@@ -15,9 +15,11 @@ import com.gohj99.wearnfc.data.IcCardUi
 import com.gohj99.wearnfc.data.newCardId
 import com.gohj99.wearnfc.sync.WatchSnapshot
 import com.gohj99.wearnfc.sync.WearProtocol
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -96,6 +98,29 @@ object CardManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val ready = CompletableDeferred<Unit>()
     private val cardsMutex = Mutex()
+    private val selections = LatestCardSelection(scope) { cardId, force, isLatest ->
+        try {
+            withCards {
+                // 等待元数据锁期间可能又滑到了其他卡片，旧目标不再操作硬件。
+                if (isLatest()) applySelectionLocked(cardId, force, isLatest) else false
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.e(TAG, "Card switch failed", error)
+            RuntimeErrors.report(RuntimeError.CardSwitchFailed)
+            false
+        }
+    }
+
+    /** 非空时仍有用户请求待处理，UI 不应跳回中间完成的卡片。 */
+    val requestedCardId: StateFlow<String?> = selections.requestedCardId
+
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
+
+    // 回滚失败时保留切换前的文件，下一次操作必须先恢复，不能备份不完整配置。
+    private var recoveryBackup: NfcConfigBackup? = null
 
     private suspend fun <T> withCards(block: suspend () -> T): T {
         ready.await()
@@ -140,7 +165,7 @@ object CardManager {
     const val ORIGINAL_ID = ORIGINAL_CARD_ID
 
     /**
-     * 返回激活卡片在卡片列表中的索引，供 UI 计算 pager 初始页。
+     * 返回最新请求（无待处理请求时为激活卡片）的索引，供 UI 计算 pager 初始页。
      *
      * 页面布局：[0..cards.size-1] = 卡片页，[cards.size] = 还原页，[cards.size+1] = 设置页。
      *
@@ -148,7 +173,7 @@ object CardManager {
      * - 激活为"原始"或卡片未找到 → 返回 [cards.size]（还原页）
      */
     fun initialPagerPage(): Int {
-        val id = _activeCardId.value
+        val id = requestedCardId.value ?: _activeCardId.value
         if (id == ORIGINAL_CARD_ID) return _cards.value.size
         val idx = _cards.value.indexOfFirst { it.id == id }
         return if (idx >= 0) idx else _cards.value.size
@@ -179,7 +204,6 @@ object CardManager {
             // 1. 从 DataStore 恢复卡片元数据与激活状态
             try {
                 restoreCards()
-                ready.complete(Unit)
             } catch (error: Exception) {
                 ready.completeExceptionally(error)
                 Log.e(TAG, "Failed to restore saved cards", error)
@@ -188,6 +212,9 @@ object CardManager {
             checkAvailability()
             // 3. 模块存在时读取原始配置路径；读取失败不影响安装检测结果
             if (_isAvailable.value == true) refreshOriginalPaths()
+            // 切卡必须等备份路径读取结束，避免与初始化并发使用不同的路径。
+            ready.complete(Unit)
+            _isInitialized.value = true
         }
     }
 
@@ -455,11 +482,13 @@ object CardManager {
      * 若目标卡片与当前激活卡片相同，直接返回（幂等），避免无谓的 NFC 重启。
      * 手动强制重新应用请用 [forceApplyCard]。
      *
+     * 快速请求只保留最新的等待目标；页面退出不会打断已经开始的硬件操作。
+     *
      * @param cardId 目标卡片 ID；[ORIGINAL_CARD_ID] 表示还原原始
-     * @param onResult 切换结果回调：true = 成功（或已是目标卡片，无需切换），false = 失败
+     * @param onResult true = 成功或已是目标卡片，false = 失败或被更新的请求替代
      */
     suspend fun switchToCard(cardId: String, onResult: ((success: Boolean) -> Unit)? = null): Boolean {
-        val success = withCards { applySelectionLocked(cardId) }
+        val success = selections.submit(cardId).await()
         onResult?.invoke(success)
         return success
     }
@@ -472,28 +501,112 @@ object CardManager {
      * @param onResult 切换结果回调：true = 成功，false = 失败
      */
     suspend fun forceApplyCard(cardId: String, onResult: ((success: Boolean) -> Unit)? = null): Boolean {
-        val success = withCards { applySelectionLocked(cardId, force = true) }
+        val success = selections.submit(cardId, force = true).await()
         onResult?.invoke(success)
         return success
     }
 
     /** 调用者持有 cardsMutex，避免手机、磁贴和手表 UI 同时修改 NFC 配置。 */
-    private suspend fun applySelectionLocked(cardId: String, force: Boolean = false): Boolean {
-        if (!force && cardId == _activeCardId.value) return true
-        val ok = if (cardId == ORIGINAL_CARD_ID) {
-            restoreOriginal()
+    private suspend fun applySelectionLocked(
+        cardId: String,
+        force: Boolean = false,
+        isLatest: () -> Boolean = { true },
+    ): Boolean = withContext(NonCancellable) {
+        val meta = if (cardId == ORIGINAL_CARD_ID) {
+            null
         } else {
-            val meta = _cardsMeta.value.firstOrNull { it.id == cardId } ?: return false
-            applyCard(meta)
-        }
-        if (ok) {
-            _activeCardId.value = cardId
-            appContext.cardDataStore.edit { prefs ->
-                prefs[KEY_ACTIVE_CARD] = cardId
+            _cardsMeta.value.firstOrNull { it.id == cardId } ?: run {
+                RuntimeErrors.report(RuntimeError.CardSwitchFailed)
+                return@withContext false
             }
-            vibrateOnCardChanged()
         }
-        return ok
+        val pendingRecovery = recoveryBackup
+        if (pendingRecovery != null) {
+            if (!disableNfc() || !pendingRecovery.restore() || !enableNfc()) {
+                RuntimeErrors.report(RuntimeError.ConfigurationRecoveryFailed)
+                return@withContext false
+            }
+            recoveryBackup = null
+            pendingRecovery.delete()
+        }
+        if (!isLatest()) return@withContext false
+        if (!force && cardId == _activeCardId.value) return@withContext true
+
+        val module = Config.selectedModule.value
+        val backup = backupConfiguration(module) ?: run {
+            RuntimeErrors.report(RuntimeError.CardSwitchFailed)
+            return@withContext false
+        }
+        try {
+            // 备份期间也可能出现新目标，此时尚未关闭 NFC，可以直接跳过旧请求。
+            if (!isLatest()) return@withContext false
+            val result = performCardSwitch(object : CardSwitchOperations {
+                override suspend fun disableNfc() = CardManager.disableNfc()
+                override suspend fun writeConfiguration() =
+                    if (meta == null) restoreOriginal(module) else applyCard(meta, module)
+                override suspend fun restoreConfiguration() = backup.restore()
+                override suspend fun enableNfc() = CardManager.enableNfc()
+                override suspend fun commit() {
+                    // 先落盘再发布 Flow，页面离开也不会打断状态保存。
+                    appContext.cardDataStore.edit { prefs -> prefs[KEY_ACTIVE_CARD] = cardId }
+                    _activeCardId.value = cardId
+                    vibrateOnCardChanged()
+                }
+            })
+            if (!result.success) {
+                Log.e(TAG, "Card switch failed (recovered=${result.recovered})", result.cause)
+                if (!result.recovered) recoveryBackup = backup
+                RuntimeErrors.report(
+                    if (result.recovered) RuntimeError.CardSwitchFailed
+                    else RuntimeError.ConfigurationRecoveryFailed,
+                )
+            }
+            result.success
+        } finally {
+            if (recoveryBackup !== backup) backup.delete()
+        }
+    }
+
+    /** 精确保留切换前的两个文件；写回时仍保留目标 inode。 */
+    private class NfcConfigBackup(
+        val routingTarget: String,
+        val confTarget: String,
+        val routing: File,
+        val conf: File,
+    ) {
+        fun restore(): Boolean {
+            val routingResult = runSuCommand("cat '${routing.absolutePath}' > '$routingTarget'")
+            val confResult = runSuCommand("cat '${conf.absolutePath}' > '$confTarget'")
+            return routingResult.success && confResult.success
+        }
+
+        fun delete() {
+            routing.delete()
+            conf.delete()
+        }
+    }
+
+    private fun backupConfiguration(module: NfcModule): NfcConfigBackup? {
+        val routing = File.createTempFile("nfc-routing-", ".backup", appContext.cacheDir)
+        val conf = try {
+            File.createTempFile("nfc-conf-", ".backup", appContext.cacheDir)
+        } catch (error: Exception) {
+            routing.delete()
+            throw error
+        }
+        val backup = NfcConfigBackup(
+            "${module.moduleDir}/system/etc/nfc_rule_configs.xml",
+            "${module.moduleDir}/system/vendor/etc/libnfc-nxp.conf",
+            routing,
+            conf,
+        )
+        val result = runSuCommand(
+            "cat '${backup.routingTarget}' > '${routing.absolutePath}' && " +
+                "cat '${backup.confTarget}' > '${conf.absolutePath}'",
+        )
+        if (result.success) return backup
+        backup.delete()
+        return null
     }
 
     /** 成功修改 NFC 卡片配置后给出短暂触觉反馈。 */
@@ -521,8 +634,7 @@ object CardManager {
      *
      * @return 两个 cp 命令均成功则返回 true
      */
-    private suspend fun restoreOriginal(): Boolean = withContext(Dispatchers.IO) {
-        val module = Config.selectedModule.value
+    private suspend fun restoreOriginal(module: NfcModule): Boolean = withContext(Dispatchers.IO) {
         val routingTarget = "${module.moduleDir}/system/etc/nfc_rule_configs.xml"
         val confTarget = "${module.moduleDir}/system/vendor/etc/libnfc-nxp.conf"
 
@@ -532,21 +644,18 @@ object CardManager {
         if (!r1.success) Log.e(TAG, "Failed to restore routing configuration (exit=${r1.exitCode}): ${r1.stderr.take(300)}")
         if (!r2.success) Log.e(TAG, "Failed to restore NFC configuration (exit=${r2.exitCode}): ${r2.stderr.take(300)}")
 
-        val ok = r1.success && r2.success
-        if (ok) refreshNfc()
-        ok
+        r1.success && r2.success
     }
 
     /**
-     * 应用某张模拟卡：修改 nfc_rule_configs.xml 与 libnfc-nxp.conf，并刷新 NFC。
+     * 应用某张模拟卡：修改 nfc_rule_configs.xml 与 libnfc-nxp.conf。
      *
      * 注意：总是从 [OriginalPaths] 中的原始备份文件读取内容再写入目标路径，
      * 避免卡片互切时读到上一次已修改过的文件导致 pattern 匹配失败。
      *
      * @return 两步文件修改均成功则返回 true
      */
-    private suspend fun applyCard(meta: CardMeta): Boolean = withContext(Dispatchers.IO) {
-        val module = Config.selectedModule.value
+    private suspend fun applyCard(meta: CardMeta, module: NfcModule): Boolean = withContext(Dispatchers.IO) {
         val routingTarget = "${module.moduleDir}/system/etc/nfc_rule_configs.xml"
         val confTarget = "${module.moduleDir}/system/vendor/etc/libnfc-nxp.conf"
 
@@ -565,8 +674,6 @@ object CardManager {
             return@withContext false
         }
 
-        // 3) 刷新 NFC 状态
-        refreshNfc()
         true
     }
 
@@ -779,17 +886,23 @@ object CardManager {
         true
     }
 
-    /**
-     * 刷新 NFC 状态（封包函数）。
-     * su -c 'cmd nfc disable-nfc' → 等待配置的时间 → su -c 'cmd nfc enable-nfc'
-     */
-    private suspend fun refreshNfc() = withContext(Dispatchers.IO) {
-        val r1 = runSuCommand("cmd nfc disable-nfc")
-        delay(Config.refreshNfcWaitMillis.value.toLong())
-        val r2 = runSuCommand("cmd nfc enable-nfc")
-        if (!r1.success || !r2.success) {
-            Log.w(TAG, "NFC refresh may have failed (disable exit=${r1.exitCode}, enable exit=${r2.exitCode})")
+    /** 修改卡片配置前关闭 NFC。 */
+    private suspend fun disableNfc(): Boolean = withContext(Dispatchers.IO) {
+        val result = runSuCommand("cmd nfc disable-nfc")
+        if (!result.success) {
+            Log.w(TAG, "Failed to disable NFC (exit=${result.exitCode})")
         }
+        result.success
+    }
+
+    /** 修改卡片配置后，等待设定的延迟再启用 NFC。 */
+    private suspend fun enableNfc(): Boolean = withContext(Dispatchers.IO) {
+        delay(Config.refreshNfcWaitMillis.value.toLong())
+        val result = runSuCommand("cmd nfc enable-nfc")
+        if (!result.success) {
+            Log.w(TAG, "Failed to enable NFC (exit=${result.exitCode})")
+        }
+        result.success
     }
 
     // ── dump 文件解析 ────────────────────────────────────────────────────────
@@ -844,26 +957,12 @@ object CardManager {
 
 // ── 工具函数 ──────────────────────────────────────────────────────────────────
 
-/** su 命令执行结果 */
-private data class SuResult(
-    val exitCode: Int,
-    val stdout: String,
-    val stderr: String,
-) {
-    val success: Boolean get() = exitCode == 0
-}
-
 /** 执行 `su -c '<command>'` */
 private fun runSuCommand(command: String): SuResult {
-    return try {
-        val process = Runtime.getRuntime().exec(arrayOf("su", "-c", command))
-        val stdout = process.inputStream.bufferedReader().readText()
-        val stderr = process.errorStream.bufferedReader().readText()
-        val code = process.waitFor()
-        SuResult(code, stdout, stderr)
-    } catch (e: Exception) {
-        Log.e(TAG, "Root command failed: $command (${e.message})", e)
-        SuResult(-1, "", e.message ?: "exception")
+    return RootCommands.run(command).also { result ->
+        if (!result.success) {
+            Log.e(TAG, "Root command failed: $command (exit=${result.exitCode}, timedOut=${result.timedOut}): ${result.stderr.take(300)}")
+        }
     }
 }
 

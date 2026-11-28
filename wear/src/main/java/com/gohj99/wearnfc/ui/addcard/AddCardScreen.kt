@@ -1,9 +1,9 @@
 package com.gohj99.wearnfc.ui.addcard
 
-import android.app.Activity
 import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.widget.Toast
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -16,7 +16,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.wear.compose.foundation.pager.HorizontalPager
 import androidx.wear.compose.foundation.pager.rememberPagerState
 import androidx.wear.compose.material3.AnimatedPage
@@ -35,8 +34,8 @@ fun AddCardScreen() {
     val appState = LocalGlobalAppState.current
     val coroutineScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 0) { 4 }
-    val activity = LocalContext.current as Activity
-    val nfcAdapter = remember { NfcAdapter.getDefaultAdapter(activity) }
+    val activity = LocalActivity.current ?: return
+    val nfcAdapter = remember(activity) { NfcAdapter.getDefaultAdapter(activity) }
     var showOpenOnPhone by rememberSaveable { mutableStateOf(false) }
 
     // 保留检测到的标签，供 Page2 使用

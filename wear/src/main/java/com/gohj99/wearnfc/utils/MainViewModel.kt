@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gohj99.wearnfc.runtime.Config
+import com.gohj99.wearnfc.runtime.RootCommands
 import com.gohj99.wearnfc.ui.AppError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,8 +49,8 @@ class MainViewModel : ViewModel() {
     }
 
     private fun checkRoot(): Boolean = try {
-        val (exitCode, output) = runSuCommand("id -u")
-        exitCode == 0 && output.trim() == "0"
+        val result = RootCommands.run("id -u")
+        result.success && result.stdout.trim() == "0"
     } catch (error: Exception) {
         Log.w("MainViewModel", "Root access check failed", error)
         false
@@ -57,22 +58,9 @@ class MainViewModel : ViewModel() {
 
     private fun checkModuleDirectory(): Boolean = try {
         val module = Config.selectedModule.value
-        val (exitCode, _) = runSuCommand("test -d '${module.moduleDir}'")
-        exitCode == 0
+        RootCommands.run("test -d '${module.moduleDir}'").success
     } catch (error: Exception) {
         Log.w("MainViewModel", "Module directory check failed", error)
         false
-    }
-
-    private fun runSuCommand(command: String): Pair<Int, String> {
-        val process = ProcessBuilder("su", "-c", command)
-            .redirectErrorStream(true)
-            .start()
-        try {
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            return process.waitFor() to output
-        } finally {
-            process.destroy()
-        }
     }
 }

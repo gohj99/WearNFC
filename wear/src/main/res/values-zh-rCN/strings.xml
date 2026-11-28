@@ -8,6 +8,12 @@
     <string name="error_no_supported_module_title">没有安装支持的模块</string>
     <string name="error_no_supported_module_body">未检测到当前选择的 NFC 模块。请先安装并启用对应的模块后重试。</string>
     <string name="error_dismiss">知道了</string>
+    <string name="error_root_timeout_title">Root 命令超时</string>
+    <string name="error_root_timeout_body">Root 命令超过 10 秒未完成，本次切卡或检查失败。请检查 Root 授权和 NFC 模块后重试。</string>
+    <string name="error_card_switch_title">切卡失败</string>
+    <string name="error_card_switch_body">未能完成卡片切换。请检查 Root 授权和 NFC 模块后重试。</string>
+    <string name="error_config_recovery_title">NFC 恢复失败</string>
+    <string name="error_config_recovery_body">未能完整还原切换前的配置，或未能重新启用 NFC。请检查 Root 授权和 NFC 模块，再次选择卡片以重试恢复。</string>
 
     <!-- 还原页 -->
     <string name="restore_page_label">原始 NFC</string>
@@ -24,7 +30,7 @@
     <string name="refresh_nfc_title">NFC 刷新等待时间</string>
     <string name="refresh_nfc_description">关闭 NFC 到重新开启之间的等待时间。</string>
     <string name="refresh_nfc_wait_value">等待时间：%1$d 毫秒</string>
-    <string name="refresh_nfc_range">范围：50-5000 毫秒</string>
+    <string name="refresh_nfc_range">范围：1–500 毫秒</string>
     <string name="refresh_nfc_save">保存</string>
 
     <!-- NFC 模块页 -->

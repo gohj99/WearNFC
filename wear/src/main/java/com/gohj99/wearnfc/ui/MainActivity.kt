@@ -21,6 +21,7 @@ import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavHostState
 import com.gohj99.wearnfc.nfc.WearNfcHostApduService
+import com.gohj99.wearnfc.runtime.RuntimeErrors
 import com.gohj99.wearnfc.ui.addcard.AddCardScreen
 import com.gohj99.wearnfc.ui.main.MainScreen
 import com.gohj99.wearnfc.ui.main.NfcModulePage
@@ -59,6 +60,7 @@ class MainActivity : ComponentActivity() {
                 this@MainActivity.appState = appState
 
                 val startupError by viewModel.startupError.collectAsState()
+                val runtimeError by RuntimeErrors.error.collectAsState()
 
                 CompositionLocalProvider(
                     LocalGlobalAppState provides appState,
@@ -94,8 +96,11 @@ class MainActivity : ComponentActivity() {
 
                     // 全局错误对话框，覆盖在所有页面之上
                     ErrorDialog(
-                        error = startupError,
-                        onDismiss = viewModel::dismissStartupError,
+                        error = runtimeError?.toAppError() ?: startupError,
+                        onDismiss = {
+                            RuntimeErrors.dismiss()
+                            viewModel.dismissStartupError()
+                        },
                     )
                 }
             }

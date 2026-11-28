@@ -7,6 +7,12 @@
     <string name="error_no_supported_module_title">No supported module installed</string>
     <string name="error_no_supported_module_body">The selected NFC module was not detected. Please install and enable the corresponding module, then try again.</string>
     <string name="error_dismiss">Got it</string>
+    <string name="error_root_timeout_title">Root command timed out</string>
+    <string name="error_root_timeout_body">A Root command did not finish within 10 seconds. The card switch or check failed. Please check Root access and the NFC module, then try again.</string>
+    <string name="error_card_switch_title">Card switch failed</string>
+    <string name="error_card_switch_body">The card switch could not be completed. Please check Root access and the NFC module, then try again.</string>
+    <string name="error_config_recovery_title">NFC recovery failed</string>
+    <string name="error_config_recovery_body">The previous NFC configuration could not be fully restored, or NFC could not be enabled. Please check Root access and the NFC module, then select a card again to retry recovery.</string>
 
     <!-- Restore page -->
     <string name="restore_page_label">Original NFC</string>
@@ -23,7 +29,7 @@
     <string name="refresh_nfc_title">NFC refresh wait</string>
     <string name="refresh_nfc_description">Time between disabling and enabling NFC.</string>
     <string name="refresh_nfc_wait_value">Wait time: %1$d ms</string>
-    <string name="refresh_nfc_range">Range: 50-5000 ms</string>
+    <string name="refresh_nfc_range">Range: 1–500 ms</string>
     <string name="refresh_nfc_save">Save</string>
 
     <!-- NFC module page -->

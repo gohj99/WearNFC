@@ -22,7 +22,13 @@ private val KEY_NFC_MODULE = stringPreferencesKey("nfc_module")
 private val KEY_REFRESH_NFC_WAIT_MILLIS = intPreferencesKey("refresh_nfc_wait_millis")
 private val LEGACY_KEY_REFRESH_NFC_WAIT_SECONDS = intPreferencesKey("refresh_nfc_wait_seconds")
 
-private const val DEFAULT_REFRESH_NFC_WAIT_MILLIS = 1_000
+internal const val DEFAULT_REFRESH_NFC_WAIT_MILLIS = 200
+
+internal fun normalizeRefreshNfcWaitMillis(milliseconds: Int): Int =
+    milliseconds.coerceIn(
+        Config.MIN_REFRESH_NFC_WAIT_MILLIS,
+        Config.MAX_REFRESH_NFC_WAIT_MILLIS,
+    )
 
 /**
  * 目前支持的 NFC 模拟模块。
@@ -67,9 +73,9 @@ object Config {
 
     // ── NFC 刷新等待时间 ────────────────────────────────────────────────────
 
-    const val MIN_REFRESH_NFC_WAIT_MILLIS = 50
-    const val MAX_REFRESH_NFC_WAIT_MILLIS = 5_000
-    const val REFRESH_NFC_WAIT_STEP_MILLIS = 50
+    const val MIN_REFRESH_NFC_WAIT_MILLIS = 1
+    const val MAX_REFRESH_NFC_WAIT_MILLIS = 500
+    const val REFRESH_NFC_WAIT_STEP_MILLIS = 1
 
     private val _refreshNfcWaitMillis = MutableStateFlow(DEFAULT_REFRESH_NFC_WAIT_MILLIS)
 
@@ -105,9 +111,11 @@ object Config {
                 ?.toLong()
                 ?.times(1_000L)
             _refreshNfcWaitMillis.value =
-                (savedMillis?.toLong() ?: migratedMillis ?: DEFAULT_REFRESH_NFC_WAIT_MILLIS.toLong())
-                    .coerceIn(MIN_REFRESH_NFC_WAIT_MILLIS.toLong(), MAX_REFRESH_NFC_WAIT_MILLIS.toLong())
-                    .toInt()
+                normalizeRefreshNfcWaitMillis(
+                    (savedMillis?.toLong() ?: migratedMillis ?: DEFAULT_REFRESH_NFC_WAIT_MILLIS.toLong())
+                        .coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong())
+                        .toInt(),
+                )
         }
     }
 
@@ -127,7 +135,7 @@ object Config {
 
     /** 设置刷新 NFC 时的等待时间（毫秒），并持久化到 DataStore。 */
     fun setRefreshNfcWaitMillis(milliseconds: Int) {
-        val normalized = milliseconds.coerceIn(MIN_REFRESH_NFC_WAIT_MILLIS, MAX_REFRESH_NFC_WAIT_MILLIS)
+        val normalized = normalizeRefreshNfcWaitMillis(milliseconds)
         _refreshNfcWaitMillis.value = normalized
         scope.launch {
             appContext.configDataStore.edit { prefs ->

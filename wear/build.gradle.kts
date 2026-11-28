@@ -13,8 +13,8 @@ android {
         applicationId = "com.gohj99.wearnfc"
         minSdk = 30
         targetSdk = 37
-        versionCode = 6
-        versionName = "2.3"
+        versionCode = 7
+        versionName = "2.4"
     }
 
     signingConfigs {
@@ -77,6 +77,7 @@ dependencies {
     implementation(libs.compose.ui.tooling)
     implementation(libs.guava)
     implementation(libs.play.services.wearable)
+    testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

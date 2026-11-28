@@ -30,14 +30,19 @@ import kotlinx.coroutines.launch
 @Composable
 fun MainScreen() {
     val cardManager = CardManager
+    val isInitialized by cardManager.isInitialized.collectAsState()
     val cards by cardManager.cards.collectAsState()
     val activeCardId by cardManager.activeCardId.collectAsState()
+    val requestedCardId by cardManager.requestedCardId.collectAsState()
     val detailOriginCardId = rememberSaveable { mutableStateOf<String?>(null) }
+    // 元数据恢复前不能创建空列表的还原页，否则它会覆盖用户真正的切卡请求。
+    if (!isInitialized) return
     // 卡片增删后按当前卡片重建分页，避免旧页码指向另一张卡并意外切卡。
     key(cards.map { it.id }) {
         CardPager(
             cards = cards,
             activeCardId = activeCardId,
+            requestedCardId = requestedCardId,
             detailOriginCardId = detailOriginCardId,
         )
     }
@@ -47,6 +52,7 @@ fun MainScreen() {
 private fun CardPager(
     cards: List<IcCardUi>,
     activeCardId: String,
+    requestedCardId: String?,
     detailOriginCardId: MutableState<String?>,
 ) {
     val cardManager = CardManager
@@ -66,8 +72,8 @@ private fun CardPager(
     val isOnSettingsPage = pagerState.currentPage == cards.size + 1
 
     // 手机端切卡时，即使手表界面已经打开，也同步到手表确认的当前卡片。
-    LaunchedEffect(activeCardId) {
-        if (!isOnSettingsPage && !pagerState.isScrollInProgress) {
+    LaunchedEffect(activeCardId, requestedCardId) {
+        if (requestedCardId == null && !isOnSettingsPage && !pagerState.isScrollInProgress) {
             val detailPage = detailOriginCardId.value?.let { cardId ->
                 cards.indexOfFirst { it.id == cardId }.takeIf { it >= 0 }
             }
@@ -77,7 +83,7 @@ private fun CardPager(
 
     // 详情返回时优先恢复打开详情的卡片；其他前台恢复仍同步外部切卡结果。
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-        if (!isOnSettingsPage) {
+        if (!isOnSettingsPage && requestedCardId == null) {
             val originCardId = detailOriginCardId.value
             val originPage = originCardId?.let { cardId ->
                 cards.indexOfFirst { it.id == cardId }.takeIf { it >= 0 }

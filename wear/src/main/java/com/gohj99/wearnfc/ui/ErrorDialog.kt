@@ -7,6 +7,7 @@ import androidx.wear.compose.material3.AlertDialog
 import androidx.wear.compose.material3.AlertDialogDefaults
 import androidx.wear.compose.material3.Text
 import com.gohj99.wearnfc.R
+import com.gohj99.wearnfc.runtime.RuntimeError
 
 /**
  * 通用错误对话框。
@@ -54,4 +55,25 @@ sealed class AppError(
         titleRes = R.string.error_no_supported_module_title,
         bodyRes = R.string.error_no_supported_module_body,
     )
+
+    data object RootCommandTimeout : AppError(
+        titleRes = R.string.error_root_timeout_title,
+        bodyRes = R.string.error_root_timeout_body,
+    )
+
+    data object CardSwitchFailed : AppError(
+        titleRes = R.string.error_card_switch_title,
+        bodyRes = R.string.error_card_switch_body,
+    )
+
+    data object ConfigurationRecoveryFailed : AppError(
+        titleRes = R.string.error_config_recovery_title,
+        bodyRes = R.string.error_config_recovery_body,
+    )
+}
+
+internal fun RuntimeError.toAppError(): AppError = when (this) {
+    RuntimeError.RootCommandTimeout -> AppError.RootCommandTimeout
+    RuntimeError.CardSwitchFailed -> AppError.CardSwitchFailed
+    RuntimeError.ConfigurationRecoveryFailed -> AppError.ConfigurationRecoveryFailed
 }
