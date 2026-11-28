@@ -13,8 +13,27 @@ android {
         applicationId = "com.gohj99.wearnfc"
         minSdk = 30
         targetSdk = 37
-        versionCode = 8
-        versionName = "2.5"
+        versionCode = 9
+        versionName = "2.6"
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+        externalNativeBuild {
+            cmake {
+                arguments += "-DHELPER_OUTPUT_DIRECTORY=${layout.buildDirectory.dir("generated/ksuProfileAssets").get().asFile.absolutePath}"
+            }
+        }
+    }
+
+    sourceSets.getByName("main").assets.directories.add(
+        layout.buildDirectory.dir("generated/ksuProfileAssets").get().asFile.absolutePath,
+    )
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     signingConfigs {
@@ -51,6 +70,13 @@ android {
     useLibrary("wear-sdk")
     buildFeatures {
         compose = true
+    }
+}
+
+tasks.configureEach {
+    when (name) {
+        "mergeDebugAssets" -> dependsOn("externalNativeBuildDebug")
+        "mergeReleaseAssets" -> dependsOn("externalNativeBuildRelease")
     }
 }
 

@@ -25,6 +25,7 @@ import com.gohj99.wearnfc.runtime.RuntimeErrors
 import com.gohj99.wearnfc.ui.addcard.AddCardScreen
 import com.gohj99.wearnfc.ui.main.MainScreen
 import com.gohj99.wearnfc.ui.main.NfcModulePage
+import com.gohj99.wearnfc.ui.main.settings.FixNfcPage
 import com.gohj99.wearnfc.ui.main.settings.RefreshNfcPage
 import com.gohj99.wearnfc.ui.theme.WearNFCTheme
 import com.gohj99.wearnfc.utils.GlobalAppState
@@ -79,6 +80,9 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(Destinations.REFRESH_NFC) {
                             RefreshNfcPage()
+                        }
+                        composable(Destinations.FIX_NFC) {
+                            FixNfcPage()
                         }
                         composable(Destinations.ABOUT) {
                             AboutPage()

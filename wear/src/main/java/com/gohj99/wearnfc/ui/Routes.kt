@@ -6,6 +6,7 @@ import androidx.navigation.NavController
 object Destinations {
     const val HOME = "home"
     const val NFC_MODULE = "nfc_module"
+    const val FIX_NFC = "fix_nfc"
     const val REFRESH_NFC = "refresh_nfc"
     const val ABOUT = "about"
     const val ADD_CARD = "add_card"

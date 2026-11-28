@@ -24,7 +24,19 @@
     <string name="settings_title">设置</string>
     <string name="settings_module">模拟设置</string>
     <string name="settings_refresh_nfc">NFC 刷新等待时间</string>
+    <string name="settings_fix_nfc">修复 NFC</string>
     <string name="settings_about">关于</string>
+
+    <!-- KernelSU NFC profile repair -->
+    <string name="fix_nfc_title">修复 NFC</string>
+    <string name="fix_nfc_description">检查 com.android.nfc 的 KernelSU 应用配置，并允许模块修改作用于该应用。</string>
+    <string name="fix_nfc_action">检查并修复</string>
+    <string name="fix_nfc_working">检查中…</string>
+    <string name="fix_nfc_status_ready">尚未检查配置。</string>
+    <string name="fix_nfc_status_ok">NFC 应用配置已设为自定义，模块修改已启用。</string>
+    <string name="fix_nfc_status_fixed">NFC 应用配置已修复并验证。</string>
+    <string name="fix_nfc_status_failed">无法检查或修复 NFC 配置：%1$s</string>
+    <string name="fix_nfc_package_missing">未找到安卓 NFC 组件。</string>
 
     <!-- NFC 刷新设置 -->
     <string name="refresh_nfc_title">NFC 刷新等待时间</string>

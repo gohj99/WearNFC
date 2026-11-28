@@ -23,7 +23,19 @@
     <string name="settings_title">Settings</string>
     <string name="settings_module">Emulation settings</string>
     <string name="settings_refresh_nfc">NFC refresh wait</string>
+    <string name="settings_fix_nfc">Fix NFC</string>
     <string name="settings_about">About</string>
+
+    <!-- KernelSU NFC profile repair -->
+    <string name="fix_nfc_title">Fix NFC</string>
+    <string name="fix_nfc_description">Check the KernelSU app profile for com.android.nfc and allow module changes to apply.</string>
+    <string name="fix_nfc_action">Check and fix</string>
+    <string name="fix_nfc_working">Checking…</string>
+    <string name="fix_nfc_status_ready">Profile has not been checked.</string>
+    <string name="fix_nfc_status_ok">NFC profile is custom and module changes are enabled.</string>
+    <string name="fix_nfc_status_fixed">NFC profile was repaired and verified.</string>
+    <string name="fix_nfc_status_failed">Could not check or repair the NFC profile: %1$s</string>
+    <string name="fix_nfc_package_missing">The Android NFC component was not found.</string>
 
     <!-- NFC refresh settings -->
     <string name="refresh_nfc_title">NFC refresh wait</string>
